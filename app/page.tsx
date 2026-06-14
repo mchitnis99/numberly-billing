@@ -1,159 +1,263 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
-import { Project, Invoice, SAMPLE_PROJECTS, paymentStatus, totalNetReceived, remainingBalance, fmt, ALLOC_COLORS } from './lib/data'
-import { StatusBadge, ChannelBadge, NewRepBadge } from './components/Badge'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { Project, Invoice, Allocation, SAMPLE_PROJECTS, paymentStatus, totalNetReceived, remainingBalance, numberlyShare, fmt, ALLOC_COLORS, parseCSVRow } from './lib/data'
 import { AllocBar } from './components/AllocBar'
 
-const STORAGE_KEY = 'nb_billing_v1'
+const STORAGE_KEY = 'nb_billing_v2'
 
-function loadProjects(): Project[] {
+function load(): Project[] {
   if (typeof window === 'undefined') return SAMPLE_PROJECTS
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY)
-    return saved ? JSON.parse(saved) : SAMPLE_PROJECTS
-  } catch { return SAMPLE_PROJECTS }
+  try { const s = localStorage.getItem(STORAGE_KEY); return s ? JSON.parse(s) : SAMPLE_PROJECTS } catch { return SAMPLE_PROJECTS }
 }
+function save(p: Project[]) { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(p)) } catch {} }
 
-function saveProjects(projects: Project[]) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(projects)) } catch {}
-}
+type SortKey = 'month' | 'client' | 'amount' | 'balance' | 'status' | 'date' | 'readyForBilling'
+type View = 'all' | 'outstanding' | 'ready' | 'paid'
 
-type Page = 'dashboard' | 'projects' | 'add' | 'detail'
 const emptyInv = (): Invoice => ({ num: '', date: '', amt: 0, due: '', paid: '', net: 0, fee: 0 })
+const emptyAlloc = (): Allocation => ({ J: 0, M: 0, N: 0, A: 0, G: 0, S: 0 })
 
-export default function BillingApp() {
-  const [page, setPage] = useState<Page>('dashboard')
-  const [projects, setProjects] = useState<Project[]>([])
-  const [detailId, setDetailId] = useState<number | null>(null)
-  const [projSearch, setProjSearch] = useState('')
-  const [projChannel, setProjChannel] = useState('')
-  const [filterMonth, setFilterMonth] = useState('')
-  const [filterStatus, setFilterStatus] = useState('')
-  const [formMsg, setFormMsg] = useState('')
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState<number | null>(null)
-
-  const [fClient, setFClient] = useState('')
-  const [fContact, setFContact] = useState('')
-  const [fEmail, setFEmail] = useState('')
-  const [fCountry, setFCountry] = useState('US')
-  const [fDate, setFDate] = useState('')
-  const [fChannel, setFChannel] = useState('UW')
-  const [fNewrep, setFNewrep] = useState('New')
-  const [fAmount, setFAmount] = useState('')
-  const [fType, setFType] = useState('')
-  const [fComplexity, setFComplexity] = useState('Wizard+')
-  const [fDesc, setFDesc] = useState('')
-  const [fJ, setFJ] = useState('')
-  const [fM, setFM] = useState('')
-  const [fN, setFN] = useState('')
-  const [fA, setFA] = useState('')
-  const [fG, setFG] = useState('')
-  const [fInv1, setFInv1] = useState<Invoice>(emptyInv())
-  const [fInv2, setFInv2] = useState<Invoice>(emptyInv())
-  const [fInv3, setFInv3] = useState<Invoice>(emptyInv())
-
-  useEffect(() => { setProjects(loadProjects()) }, [])
-
-  const mutate = useCallback((updated: Project[]) => {
-    setProjects(updated)
-    saveProjects(updated)
-  }, [])
-
-  const months = [...new Set(projects.map(p => p.month))]
-
-  const totalBooked = projects.reduce((s, p) => s + p.amount, 0)
-  const totalCollected = projects.reduce((s, p) => s + totalNetReceived(p), 0)
-  const totalOutstanding = projects.reduce((s, p) => s + remainingBalance(p), 0)
-  const unpaidCount = projects.filter(p => paymentStatus(p) === 'Unpaid').length
-
-  const outstanding = projects.filter(p => remainingBalance(p) > 0)
-  const recentFiltered = [...projects].reverse().filter(p =>
-    (!filterMonth || p.month === filterMonth) && (!filterStatus || paymentStatus(p) === filterStatus)
-  )
-  const projFiltered = [...projects].reverse().filter(p => {
-    const s = projSearch.toLowerCase()
-    return (!s || p.client.toLowerCase().includes(s) || (p.contact || '').toLowerCase().includes(s)) &&
-      (!projChannel || p.channel === projChannel)
-  })
-
-  const detail = projects.find(p => p.id === detailId) || null
-
-  function goDetail(id: number) { setDetailId(id); setPage('detail') }
-
-  function deleteProject(id: number) {
-    mutate(projects.filter(p => p.id !== id))
-    setShowDeleteConfirm(null)
-    setPage('projects')
+function emptyProject(id: number): Project {
+  return {
+    id, newrep: 'New', month: '', channel: 'UW', delivery: 'FM', startup: '', bm: '', complexity: '',
+    modelDesc: '', soldBy: 'M', alloc: emptyAlloc(), desc: '', upworkName: '', country: 'US',
+    contact: '', email: '', date: '', amount: 0, billingThru: 'Upwork', invoicingValue: '',
+    readyForBilling: false, notes: '', invoices: [emptyInv()]
   }
+}
 
-  function resetForm() {
-    setFClient(''); setFContact(''); setFEmail(''); setFCountry('US'); setFDate('')
-    setFChannel('UW'); setFNewrep('New'); setFAmount(''); setFType(''); setFComplexity('Wizard+'); setFDesc('')
-    setFJ(''); setFM(''); setFN(''); setFA(''); setFG('')
-    setFInv1(emptyInv()); setFInv2(emptyInv()); setFInv3(emptyInv()); setFormMsg('')
+type EditCell = { id: number; field: string } | null
+
+export default function App() {
+  const [projects, setProjects] = useState<Project[]>([])
+  const [view, setView] = useState<View>('all')
+  const [sortKey, setSortKey] = useState<SortKey>('date')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+  const [search, setSearch] = useState('')
+  const [editCell, setEditCell] = useState<EditCell>(null)
+  const [detailId, setDetailId] = useState<number | null>(null)
+  const [showImport, setShowImport] = useState(false)
+  const [importMsg, setImportMsg] = useState('')
+  const [showAddRow, setShowAddRow] = useState(false)
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => { setProjects(load()) }, [])
+
+  const mutate = useCallback((updated: Project[]) => { setProjects(updated); save(updated) }, [])
+
+  function updateField(id: number, field: string, value: string | number | boolean) {
+    mutate(projects.map(p => {
+      if (p.id !== id) return p
+      if (field.startsWith('alloc.')) {
+        const k = field.split('.')[1] as keyof Allocation
+        return { ...p, alloc: { ...p.alloc, [k]: +(value as string) || 0 } }
+      }
+      if (field.startsWith('inv.')) {
+        const [, iStr, key] = field.split('.')
+        const i = parseInt(iStr)
+        const invs = [...p.invoices]
+        while (invs.length <= i) invs.push(emptyInv())
+        invs[i] = { ...invs[i], [key]: key === "amt" || key === "net" || key === "fee" ? +(value as string) || 0 : value }
+        if (key === 'net' || key === 'amt') invs[i].fee = Math.max(0, invs[i].amt - invs[i].net)
+        return { ...p, invoices: invs }
+      }
+      return { ...p, [field]: field === "amount" ? +(value as string) || 0 : value }
+    }))
   }
 
   function addProject() {
-    if (!fClient.trim()) { setFormMsg('Client name is required.'); return }
-    const amount = parseFloat(fAmount) || 0
-    if (!amount) { setFormMsg('Booked amount is required.'); return }
-    const makeInv = (inv: Invoice): Invoice => ({ ...inv, fee: Math.max(0, inv.amt - inv.net) })
-    const invoices = [makeInv(fInv1)]
-    if (fInv2.amt > 0) invoices.push(makeInv(fInv2))
-    if (fInv3.amt > 0) invoices.push(makeInv(fInv3))
+    const id = projects.length > 0 ? Math.max(...projects.map(p => p.id)) + 1 : 1
     const now = new Date()
     const month = now.toLocaleString('en-US', { month: 'short' }) + ' ' + now.getFullYear()
-    const newId = projects.length > 0 ? Math.max(...projects.map(p => p.id)) + 1 : 1
-    const project: Project = {
-      id: newId, newrep: fNewrep, month, channel: fChannel, type: fType,
-      client: fClient.trim(), bm: '', complexity: fComplexity,
-      contact: fContact, country: fCountry, email: fEmail, date: fDate, amount,
-      billing: fChannel, alloc: { J: +fJ||0, M: +fM||0, N: +fN||0, A: +fA||0, G: +fG||0, S: 0 },
-      desc: fDesc, invoices
-    }
-    mutate([...projects, project])
-    setFormMsg('Project saved!')
-    setTimeout(() => { resetForm(); setPage('projects') }, 600)
+    const p = { ...emptyProject(id), month }
+    mutate([...projects, p])
+    setDetailId(id)
+    setShowAddRow(false)
   }
 
-  const navItems: { label: string; page: Page }[] = [
-    { label: 'Dashboard', page: 'dashboard' },
-    { label: 'Projects', page: 'projects' },
-    { label: '+ Add project', page: 'add' },
-  ]
+  function deleteProject(id: number) {
+    mutate(projects.filter(p => p.id !== id))
+    setDetailId(null)
+  }
+
+  function handleCSV(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (ev) => {
+      const text = ev.target?.result as string
+      const lines = text.split('\n').filter(l => l.trim())
+      if (lines.length < 2) { setImportMsg('File appears empty.'); return }
+      const headers = parseCSVLine(lines[0])
+      let imported = 0, skipped = 0
+      const newProjects: Project[] = [...projects]
+      let nextId = projects.length > 0 ? Math.max(...projects.map(p => p.id)) + 1 : 1
+      for (let i = 1; i < lines.length; i++) {
+        const row = parseCSVLine(lines[i])
+        const partial = parseCSVRow(headers, row)
+        if (!partial || !partial.startup) { skipped++; continue }
+        const p: Project = { ...emptyProject(nextId++), ...partial } as Project
+        newProjects.push(p)
+        imported++
+      }
+      mutate(newProjects)
+      setImportMsg(`Imported ${imported} rows${skipped > 0 ? `, skipped ${skipped}` : ''}.`)
+    }
+    reader.readAsText(file)
+  }
+
+  function parseCSVLine(line: string): string[] {
+    const result: string[] = []
+    let cur = '', inQ = false
+    for (let i = 0; i < line.length; i++) {
+      const c = line[i]
+      if (c === '"') { inQ = !inQ }
+      else if (c === ',' && !inQ) { result.push(cur); cur = '' }
+      else cur += c
+    }
+    result.push(cur)
+    return result
+  }
+
+  // Filtering
+  const filtered = projects.filter(p => {
+    const s = search.toLowerCase()
+    const matchSearch = !s || p.startup.toLowerCase().includes(s) || p.contact.toLowerCase().includes(s) || p.month.toLowerCase().includes(s) || p.channel.toLowerCase().includes(s)
+    const status = paymentStatus(p)
+    const matchView = view === 'all' ? true :
+      view === 'outstanding' ? remainingBalance(p) > 0 :
+      view === 'ready' ? p.readyForBilling :
+      view === 'paid' ? status === 'Fully paid' : true
+    return matchSearch && matchView
+  })
+
+  // Sorting
+  const sorted = [...filtered].sort((a, b) => {
+    let av: string | number = 0, bv: string | number = 0
+    if (sortKey === 'month') { av = a.month; bv = b.month }
+    else if (sortKey === 'client') { av = a.startup; bv = b.startup }
+    else if (sortKey === 'amount') { av = a.amount; bv = b.amount }
+    else if (sortKey === 'balance') { av = remainingBalance(a); bv = remainingBalance(b) }
+    else if (sortKey === 'status') { av = paymentStatus(a); bv = paymentStatus(b) }
+    else if (sortKey === 'date') { av = a.date; bv = b.date }
+    else if (sortKey === 'readyForBilling') { av = a.readyForBilling ? 1 : 0; bv = b.readyForBilling ? 1 : 0 }
+    if (av < bv) return sortDir === 'asc' ? -1 : 1
+    if (av > bv) return sortDir === 'asc' ? 1 : -1
+    return 0
+  })
+
+  function toggleSort(k: SortKey) {
+    if (sortKey === k) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    else { setSortKey(k); setSortDir('desc') }
+  }
+
+  const detail = projects.find(p => p.id === detailId)
+
+  // Metrics
+  const totalBooked = projects.reduce((s, p) => s + p.amount, 0)
+  const totalCollected = projects.reduce((s, p) => s + totalNetReceived(p), 0)
+  const totalOutstanding = projects.reduce((s, p) => s + remainingBalance(p), 0)
+  const readyCount = projects.filter(p => p.readyForBilling).length
+  const numberlyTotal = projects.reduce((s, p) => s + numberlyShare(p), 0)
+
+  function InlineEdit({ id, field, value, type = 'text', options }: {
+    id: number; field: string; value: string | number | boolean; type?: string; options?: string[]
+  }) {
+    const isEditing = editCell?.id === id && editCell?.field === field
+    const [local, setLocal] = useState(String(value))
+
+    useEffect(() => { setLocal(String(value)) }, [value])
+
+    function commit() {
+      const val = type === 'number' ? parseFloat(local) || 0 : local
+      updateField(id, field, val)
+      setEditCell(null)
+    }
+
+    if (type === 'checkbox') {
+      return (
+        <input type="checkbox" checked={!!value}
+          onChange={e => updateField(id, field, e.target.checked)}
+          style={{ width: 14, height: 14, cursor: 'pointer' }} />
+      )
+    }
+
+    if (!isEditing) {
+      return (
+        <span className="cell-value" onClick={() => { setEditCell({ id, field }); setLocal(String(value)) }}
+          title="Click to edit">
+          {type === 'number' && typeof value === 'number' && field !== 'alloc.J' && field !== 'alloc.M' && field !== 'alloc.N' && field !== 'alloc.A' && field !== 'alloc.G' && field !== 'alloc.S'
+            ? (value > 0 ? fmt(value) : <span style={{ color: 'var(--text3)' }}>—</span>)
+            : value || <span style={{ color: 'var(--text3)' }}>—</span>}
+        </span>
+      )
+    }
+
+    if (options) {
+      return (
+        <select autoFocus value={local} onChange={e => { setLocal(e.target.value); updateField(id, field, e.target.value); setEditCell(null) }}
+          onBlur={() => setEditCell(null)} className="cell-input">
+          {options.map(o => <option key={o} value={o}>{o}</option>)}
+        </select>
+      )
+    }
+
+    return (
+      <input autoFocus type={type} value={local}
+        onChange={e => setLocal(e.target.value)}
+        onBlur={commit}
+        onKeyDown={e => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') setEditCell(null) }}
+        className="cell-input" style={{ width: type === 'number' ? 80 : 120 }} />
+    )
+  }
 
   return (
     <>
       <style>{`
         *, *::before, *::after { box-sizing: border-box; }
-        .wrap { max-width: 960px; margin: 0 auto; padding: 0 1.25rem 3rem; }
-        .nav { background: var(--surface); border-bottom: 0.5px solid var(--border); position: sticky; top: 0; z-index: 10; }
-        .nav-inner { max-width: 960px; margin: 0 auto; padding: 0 1.25rem; display: flex; align-items: center; gap: 2rem; height: 52px; }
-        .nav-brand { font-size: 15px; font-weight: 600; color: var(--text); letter-spacing: -0.01em; }
-        .nav-links { display: flex; gap: 4px; }
-        .nav-link { padding: 5px 12px; border-radius: var(--radius); font-size: 13px; border: none; background: transparent; color: var(--text2); cursor: pointer; transition: all 0.12s; font-family: inherit; }
-        .nav-link:hover { background: var(--surface2); color: var(--text); }
-        .nav-link.active { background: var(--surface2); color: var(--text); font-weight: 500; }
-        .page-header { display: flex; align-items: center; justify-content: space-between; padding: 1.5rem 0 1rem; gap: 12px; flex-wrap: wrap; }
-        .page-title { font-size: 13px; font-weight: 500; color: var(--text2); text-transform: uppercase; letter-spacing: 0.06em; }
-        .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 1.5rem; }
-        .metric { background: var(--surface2); border-radius: var(--radius); padding: 0.875rem 1rem; }
-        .metric-label { font-size: 11px; color: var(--text3); margin-bottom: 4px; text-transform: uppercase; letter-spacing: 0.05em; }
-        .metric-value { font-size: 20px; font-weight: 500; color: var(--text); }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); font-size: 13px; }
+        .nav { background: var(--surface); border-bottom: 0.5px solid var(--border); position: sticky; top: 0; z-index: 20; }
+        .nav-inner { max-width: 1400px; margin: 0 auto; padding: 0 1.25rem; display: flex; align-items: center; gap: 1.5rem; height: 48px; }
+        .nav-brand { font-size: 14px; font-weight: 600; color: var(--text); }
+        .nav-views { display: flex; gap: 2px; }
+        .nav-view { padding: 4px 12px; border-radius: var(--radius); font-size: 12px; border: none; background: transparent; color: var(--text2); cursor: pointer; font-family: inherit; transition: all 0.1s; }
+        .nav-view:hover { background: var(--surface2); color: var(--text); }
+        .nav-view.active { background: var(--surface2); color: var(--text); font-weight: 500; }
+        .nav-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+        .wrap { max-width: 1400px; margin: 0 auto; padding: 0 1.25rem 3rem; }
+        .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px,1fr)); gap: 8px; margin: 1rem 0; }
+        .metric { background: var(--surface2); border-radius: var(--radius); padding: 0.75rem 1rem; }
+        .metric-label { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 3px; }
+        .metric-value { font-size: 18px; font-weight: 500; color: var(--text); }
         .metric-value.green { color: var(--green); }
         .metric-value.amber { color: var(--amber); }
         .metric-value.red { color: var(--red); }
-        .card { background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--radius-lg); overflow: hidden; margin-bottom: 1.5rem; }
-        .card-header { padding: 10px 14px; border-bottom: 0.5px solid var(--border); display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
-        .card-title { font-size: 12px; font-weight: 500; color: var(--text2); text-transform: uppercase; letter-spacing: 0.06em; }
-        table { width: 100%; border-collapse: collapse; font-size: 13px; }
-        th { background: var(--surface2); font-weight: 500; color: var(--text2); padding: 8px 12px; text-align: left; border-bottom: 0.5px solid var(--border); font-size: 11px; text-transform: uppercase; letter-spacing: 0.05em; }
-        td { padding: 9px 12px; border-bottom: 0.5px solid var(--border); color: var(--text); vertical-align: middle; }
+        .metric-value.blue { color: #378ADD; }
+        .toolbar { display: flex; gap: 8px; align-items: center; margin-bottom: 0.75rem; flex-wrap: wrap; }
+        .toolbar input[type="text"] { padding: 5px 10px; border: 0.5px solid var(--border2); border-radius: var(--radius); background: var(--surface); color: var(--text); font-size: 12px; font-family: inherit; width: 200px; }
+        .btn { padding: 5px 11px; font-size: 12px; border: 0.5px solid var(--border2); border-radius: var(--radius); background: var(--surface); color: var(--text); cursor: pointer; font-family: inherit; transition: all 0.1s; white-space: nowrap; }
+        .btn:hover { background: var(--surface2); }
+        .btn-primary { background: var(--text); color: var(--bg); border-color: var(--text); font-weight: 500; }
+        .btn-primary:hover { opacity: 0.85; }
+        .btn-danger { color: var(--red); }
+        .btn-danger:hover { background: var(--red-bg); }
+        .btn-ready { background: var(--amber-bg); color: var(--amber-text); border-color: transparent; }
+        .table-wrap { border: 0.5px solid var(--border); border-radius: var(--radius-lg); overflow: auto; max-height: calc(100vh - 260px); }
+        table { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 1200px; }
+        thead { position: sticky; top: 0; z-index: 5; }
+        th { background: var(--surface2); font-weight: 500; color: var(--text2); padding: 7px 10px; text-align: left; border-bottom: 0.5px solid var(--border); font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; cursor: pointer; user-select: none; }
+        th:hover { color: var(--text); }
+        th.sorted { color: var(--text); }
+        td { padding: 6px 10px; border-bottom: 0.5px solid var(--border); color: var(--text); vertical-align: middle; white-space: nowrap; }
         tr:last-child td { border-bottom: none; }
         tr:hover td { background: var(--surface2); }
+        tr.ready-row td { background: rgba(186,117,23,0.04); }
+        .cell-value { cursor: pointer; display: inline-block; min-width: 20px; padding: 1px 3px; border-radius: 3px; transition: background 0.1s; }
+        .cell-value:hover { background: var(--border); }
+        .cell-input { padding: 2px 6px; border: 1px solid var(--text); border-radius: 4px; background: var(--surface); color: var(--text); font-size: 12px; font-family: inherit; outline: none; }
         .amt { font-variant-numeric: tabular-nums; }
-        .badge { display: inline-block; padding: 2px 8px; border-radius: 100px; font-size: 11px; font-weight: 500; white-space: nowrap; }
+        .badge { display: inline-block; padding: 1px 7px; border-radius: 100px; font-size: 10px; font-weight: 500; white-space: nowrap; }
         .badge-paid { background: var(--green-bg); color: var(--green-text); }
         .badge-partial { background: var(--amber-bg); color: var(--amber-text); }
         .badge-unpaid { background: var(--red-bg); color: var(--red-text); }
@@ -161,336 +265,285 @@ export default function BillingApp() {
         .badge-direct { background: var(--purple-bg); color: var(--purple-text); }
         .badge-new { background: var(--green-bg); color: var(--green-text); }
         .badge-repeat { background: var(--amber-bg); color: var(--amber-text); }
-        .btn { padding: 6px 12px; font-size: 12px; border: 0.5px solid var(--border2); border-radius: var(--radius); background: var(--surface); color: var(--text); cursor: pointer; transition: all 0.12s; font-family: inherit; }
-        .btn:hover { background: var(--surface2); }
-        .btn-primary { background: var(--text); color: var(--bg); border-color: var(--text); font-weight: 500; }
-        .btn-primary:hover { opacity: 0.85; }
-        .btn-danger { color: var(--red); border-color: rgba(163,45,45,0.3); }
-        .btn-danger:hover { background: var(--red-bg); }
-        .actions { display: flex; gap: 6px; align-items: center; }
-        .form-panel { background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 1.5rem; }
-        .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-        .form-group { display: flex; flex-direction: column; gap: 4px; }
-        .form-group.full { grid-column: 1 / -1; }
-        label { font-size: 11px; color: var(--text2); font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; }
-        input[type="text"], input[type="email"], input[type="number"], input[type="date"], select, textarea {
-          padding: 7px 10px; border: 0.5px solid var(--border2); border-radius: var(--radius);
-          background: var(--surface); color: var(--text); font-size: 13px; font-family: inherit;
-          transition: border-color 0.12s; width: 100%;
-        }
-        input:focus, select:focus, textarea:focus { outline: none; border-color: var(--text); }
-        .section-label { font-size: 11px; font-weight: 500; color: var(--text2); text-transform: uppercase; letter-spacing: 0.06em; margin: 1.25rem 0 0.75rem; }
-        .inv-section { border: 0.5px solid var(--border); border-radius: var(--radius); padding: 12px; margin-bottom: 8px; }
-        .inv-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 10px; }
-        .alloc-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; }
-        .detail-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 10px; }
-        .detail-name { font-size: 20px; font-weight: 500; color: var(--text); }
-        .detail-sub { font-size: 13px; color: var(--text2); margin-top: 3px; }
-        .detail-metrics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 1.25rem; }
-        .detail-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 24px; font-size: 12px; margin-bottom: 1rem; }
-        .detail-meta-item { display: flex; gap: 6px; }
-        .detail-meta-key { color: var(--text2); min-width: 100px; }
-        .inv-detail { border: 0.5px solid var(--border); border-radius: var(--radius); padding: 10px 12px; margin-bottom: 8px; }
-        .inv-detail-header { font-size: 11px; font-weight: 500; color: var(--text2); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 8px; }
-        .inv-detail-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; font-size: 12px; }
-        .inv-detail-cell { display: flex; flex-direction: column; gap: 2px; }
-        .inv-detail-cell-label { color: var(--text3); font-size: 10px; text-transform: uppercase; letter-spacing: 0.04em; }
+        .badge-ready { background: var(--amber-bg); color: var(--amber-text); }
+        .sort-arrow { margin-left: 3px; opacity: 0.5; }
+        .panel-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.3); z-index: 30; display: flex; justify-content: flex-end; }
+        .panel { background: var(--surface); width: min(560px, 100vw); height: 100vh; overflow-y: auto; border-left: 0.5px solid var(--border); padding: 1.5rem; }
+        .panel-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.25rem; }
+        .panel-name { font-size: 18px; font-weight: 500; }
+        .panel-sub { font-size: 12px; color: var(--text2); margin-top: 2px; }
+        .panel-metrics { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; margin-bottom: 1rem; }
+        .section-label { font-size: 10px; font-weight: 500; color: var(--text2); text-transform: uppercase; letter-spacing: 0.07em; margin: 1rem 0 0.5rem; }
+        .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px; font-size: 12px; }
+        .detail-item { display: flex; flex-direction: column; gap: 2px; }
+        .detail-key { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.05em; }
+        .detail-val { color: var(--text); }
+        .alloc-row { display: grid; grid-template-columns: repeat(6,1fr); gap: 6px; }
+        .alloc-cell { display: flex; flex-direction: column; gap: 2px; align-items: center; }
+        .alloc-key { font-size: 10px; font-weight: 600; }
+        .alloc-num { font-size: 12px; }
+        .inv-card { border: 0.5px solid var(--border); border-radius: var(--radius); padding: 10px; margin-bottom: 8px; }
+        .inv-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 6px; font-size: 12px; }
+        .inv-cell { display: flex; flex-direction: column; gap: 2px; }
+        .inv-key { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.04em; }
+        .panel-edit { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .pe-group { display: flex; flex-direction: column; gap: 3px; }
+        .pe-group.full { grid-column: 1 / -1; }
+        .pe-label { font-size: 10px; color: var(--text2); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 500; }
+        .pe-input { padding: 6px 8px; border: 0.5px solid var(--border2); border-radius: var(--radius); background: var(--surface); color: var(--text); font-size: 12px; font-family: inherit; }
+        .pe-input:focus { outline: none; border-color: var(--text); }
+        .import-panel { background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 1.25rem; margin-bottom: 1rem; }
+        .import-steps { font-size: 12px; color: var(--text2); line-height: 1.8; margin-bottom: 1rem; }
+        .empty { text-align: center; padding: 3rem; color: var(--text3); font-size: 12px; }
         .paid-yes { color: var(--green); font-weight: 500; }
         .paid-no { color: var(--red); }
-        .filters { display: flex; gap: 8px; flex-wrap: wrap; }
-        .filters input, .filters select { width: auto !important; font-size: 12px; padding: 5px 8px; }
-        .empty { text-align: center; padding: 2rem; color: var(--text3); font-size: 13px; }
-        .form-msg-ok { color: var(--green); font-size: 12px; margin-top: 8px; }
-        .form-msg-err { color: var(--red); font-size: 12px; margin-top: 8px; }
-        .confirm-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 100; }
-        .confirm-box { background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 1.5rem; max-width: 340px; width: 90%; }
-        .confirm-title { font-size: 15px; font-weight: 500; margin-bottom: 8px; }
-        .confirm-body { font-size: 13px; color: var(--text2); margin-bottom: 1.25rem; }
-        .confirm-actions { display: flex; gap: 8px; justify-content: flex-end; }
-        @media (max-width: 600px) {
-          .form-grid { grid-template-columns: 1fr; }
-          .alloc-grid { grid-template-columns: repeat(3, 1fr); }
-          .detail-metrics { grid-template-columns: 1fr 1fr; }
-          .inv-detail-grid { grid-template-columns: 1fr 1fr; }
-        }
+        @media (max-width: 768px) { table { min-width: 900px; } .panel { width: 100vw; } }
       `}</style>
 
       <nav className="nav">
         <div className="nav-inner">
-          <span className="nav-brand">Numberly</span>
-          <div className="nav-links">
-            {navItems.map(n => (
-              <button key={n.page} className={`nav-link ${page === n.page ? 'active' : ''}`}
-                onClick={() => { if (n.page !== 'add') resetForm(); setPage(n.page) }}>
-                {n.label}
-              </button>
+          <span className="nav-brand">Numberly Billing</span>
+          <div className="nav-views">
+            {([['all','All'],['outstanding','Outstanding'],['ready','Ready to bill'],['paid','Paid']] as [View,string][]).map(([v,l]) => (
+              <button key={v} className={`nav-view ${view===v?'active':''}`} onClick={() => setView(v)}>{l}{v==='ready'&&readyCount>0?` (${readyCount})`:''}</button>
             ))}
+          </div>
+          <div className="nav-actions">
+            <button className="btn" onClick={() => setShowImport(s => !s)}>⬆ Import CSV</button>
+            <button className="btn btn-primary" onClick={addProject}>+ Add project</button>
           </div>
         </div>
       </nav>
 
       <div className="wrap">
+        <div className="metrics">
+          <div className="metric"><div className="metric-label">Total booked</div><div className="metric-value">{fmt(totalBooked)}</div></div>
+          <div className="metric"><div className="metric-label">Collected (net)</div><div className="metric-value green">{fmt(totalCollected)}</div></div>
+          <div className="metric"><div className="metric-label">Outstanding</div><div className="metric-value amber">{fmt(totalOutstanding)}</div></div>
+          <div className="metric"><div className="metric-label">Numberly share</div><div className="metric-value blue">{fmt(numberlyTotal)}</div></div>
+          <div className="metric"><div className="metric-label">Ready to bill</div><div className="metric-value amber">{readyCount}</div></div>
+          <div className="metric"><div className="metric-label">Projects</div><div className="metric-value">{projects.length}</div></div>
+        </div>
 
-        {page === 'dashboard' && (
-          <>
-            <div className="page-header"><span className="page-title">Overview</span></div>
-            <div className="metrics">
-              <div className="metric"><div className="metric-label">Total booked</div><div className="metric-value">{fmt(totalBooked)}</div></div>
-              <div className="metric"><div className="metric-label">Collected (net)</div><div className="metric-value green">{fmt(totalCollected)}</div></div>
-              <div className="metric"><div className="metric-label">Outstanding</div><div className="metric-value amber">{fmt(totalOutstanding)}</div></div>
-              <div className="metric"><div className="metric-label">Projects</div><div className="metric-value">{projects.length}</div></div>
-              <div className="metric"><div className="metric-label">Unpaid</div><div className={`metric-value ${unpaidCount > 0 ? 'red' : ''}`}>{unpaidCount}</div></div>
+        {showImport && (
+          <div className="import-panel">
+            <div style={{ fontWeight: 500, marginBottom: 8 }}>Import from Google Sheets CSV</div>
+            <div className="import-steps">
+              1. In Google Sheets: File → Download → Comma Separated Values (.csv)<br/>
+              2. Upload that file here — columns are matched automatically
             </div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input ref={fileRef} type="file" accept=".csv" onChange={handleCSV} style={{ fontSize: 12 }} />
+              <button className="btn" onClick={() => { setShowImport(false); setImportMsg('') }}>Close</button>
+            </div>
+            {importMsg && <div style={{ marginTop: 8, fontSize: 12, color: 'var(--green)' }}>{importMsg}</div>}
+          </div>
+        )}
 
-            <div className="card">
-              <div className="card-header"><span className="card-title">Outstanding balances</span></div>
-              {outstanding.length === 0 ? (
-                <div className="empty">✓ No outstanding balances</div>
-              ) : (
-                <table>
-                  <thead><tr><th>Client</th><th>Month</th><th>Booked</th><th>Balance</th><th>Status</th><th>Actions</th></tr></thead>
-                  <tbody>
-                    {outstanding.map(p => (
-                      <tr key={p.id}>
-                        <td style={{ fontWeight: 500 }}>{p.client}</td>
-                        <td style={{ color: 'var(--text2)' }}>{p.month}</td>
-                        <td className="amt">{fmt(p.amount)}</td>
-                        <td className="amt" style={{ color: 'var(--amber)', fontWeight: 500 }}>{fmt(remainingBalance(p))}</td>
-                        <td><StatusBadge status={paymentStatus(p)} /></td>
-                        <td><button className="btn" onClick={() => goDetail(p.id)}>View</button></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+        <div className="toolbar">
+          <input type="text" placeholder="Search client, contact, month..." value={search} onChange={e => setSearch(e.target.value)} />
+          <span style={{ fontSize: 11, color: 'var(--text3)' }}>{sorted.length} project{sorted.length !== 1 ? 's' : ''}</span>
+          {search && <button className="btn" onClick={() => setSearch('')}>Clear</button>}
+        </div>
+
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th onClick={() => toggleSort('readyForBilling')} className={sortKey==='readyForBilling'?'sorted':''}>Bill<span className="sort-arrow">{sortKey==='readyForBilling'?(sortDir==='asc'?'↑':'↓'):'↕'}</span></th>
+                <th onClick={() => toggleSort('month')} className={sortKey==='month'?'sorted':''}>Month<span className="sort-arrow">{sortKey==='month'?(sortDir==='asc'?'↑':'↓'):'↕'}</span></th>
+                <th>New/Rep</th>
+                <th>Channel</th>
+                <th>Delivery</th>
+                <th onClick={() => toggleSort('client')} className={sortKey==='client'?'sorted':''}>Client<span className="sort-arrow">{sortKey==='client'?(sortDir==='asc'?'↑':'↓'):'↕'}</span></th>
+                <th>Business model</th>
+                <th>Complexity</th>
+                <th>Sold by</th>
+                <th>Contact</th>
+                <th>Country</th>
+                <th onClick={() => toggleSort('date')} className={sortKey==='date'?'sorted':''}>Contract date<span className="sort-arrow">{sortKey==='date'?(sortDir==='asc'?'↑':'↓'):'↕'}</span></th>
+                <th onClick={() => toggleSort('amount')} className={sortKey==='amount'?'sorted':''}>Booked<span className="sort-arrow">{sortKey==='amount'?(sortDir==='asc'?'↑':'↓'):'↕'}</span></th>
+                <th>Billing thru</th>
+                <th>Inv. value</th>
+                <th>Allocation</th>
+                <th onClick={() => toggleSort('status')} className={sortKey==='status'?'sorted':''}>Status<span className="sort-arrow">{sortKey==='status'?(sortDir==='asc'?'↑':'↓'):'↕'}</span></th>
+                <th>Net recv.</th>
+                <th onClick={() => toggleSort('balance')} className={sortKey==='balance'?'sorted':''}>Balance<span className="sort-arrow">{sortKey==='balance'?(sortDir==='asc'?'↑':'↓'):'↕'}</span></th>
+                <th>Numberly share</th>
+                <th>Notes</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.length === 0 && (
+                <tr><td colSpan={22}><div className="empty">No projects found</div></td></tr>
               )}
-            </div>
-
-            <div className="card">
-              <div className="card-header">
-                <span className="card-title">All projects</span>
-                <div className="filters">
-                  <select value={filterMonth} onChange={e => setFilterMonth(e.target.value)}>
-                    <option value="">All months</option>
-                    {months.map(m => <option key={m} value={m}>{m}</option>)}
-                  </select>
-                  <select value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
-                    <option value="">All statuses</option>
-                    <option value="Fully paid">Fully paid</option>
-                    <option value="Partial">Partial</option>
-                    <option value="Unpaid">Unpaid</option>
-                  </select>
-                </div>
-              </div>
-              <table>
-                <thead><tr><th>Client</th><th>Month</th><th>Channel</th><th>Booked</th><th>Net recv.</th><th>Status</th><th></th></tr></thead>
-                <tbody>
-                  {recentFiltered.map(p => (
-                    <tr key={p.id}>
-                      <td style={{ fontWeight: 500 }}>{p.client}</td>
-                      <td style={{ color: 'var(--text2)', fontSize: 12 }}>{p.month}</td>
-                      <td><ChannelBadge channel={p.channel} /></td>
-                      <td className="amt">{fmt(p.amount)}</td>
-                      <td className="amt">{fmt(totalNetReceived(p))}</td>
-                      <td><StatusBadge status={paymentStatus(p)} /></td>
-                      <td><button className="btn" onClick={() => goDetail(p.id)}>View</button></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </>
-        )}
-
-        {page === 'projects' && (
-          <>
-            <div className="page-header">
-              <span className="page-title">All projects ({projFiltered.length})</span>
-              <div className="filters">
-                <input type="text" placeholder="Search client..." value={projSearch} onChange={e => setProjSearch(e.target.value)} style={{ width: 180 }} />
-                <select value={projChannel} onChange={e => setProjChannel(e.target.value)}>
-                  <option value="">All channels</option>
-                  <option value="UW">Upwork</option>
-                  <option value="Direct">Direct</option>
-                </select>
-              </div>
-            </div>
-            <div className="card">
-              <table>
-                <thead>
-                  <tr><th>Client</th><th>Month</th><th>Type</th><th>Ch.</th><th>Booked</th><th>Net recv.</th><th>Balance</th><th>Status</th><th></th></tr>
-                </thead>
-                <tbody>
-                  {projFiltered.length === 0 ? (
-                    <tr><td colSpan={9}><div className="empty">No projects found</div></td></tr>
-                  ) : projFiltered.map(p => (
-                    <tr key={p.id}>
-                      <td style={{ fontWeight: 500 }}>{p.client}</td>
-                      <td style={{ color: 'var(--text2)', fontSize: 12 }}>{p.month}</td>
-                      <td style={{ color: 'var(--text2)', fontSize: 12 }}>{p.type || '—'}</td>
-                      <td><ChannelBadge channel={p.channel} /></td>
-                      <td className="amt">{fmt(p.amount)}</td>
-                      <td className="amt">{fmt(totalNetReceived(p))}</td>
-                      <td className="amt" style={{ color: remainingBalance(p) > 0 ? 'var(--amber)' : 'var(--text3)' }}>{fmt(remainingBalance(p))}</td>
-                      <td><StatusBadge status={paymentStatus(p)} /></td>
-                      <td>
-                        <div className="actions">
-                          <button className="btn" onClick={() => goDetail(p.id)}>View</button>
-                          <button className="btn btn-danger" onClick={() => setShowDeleteConfirm(p.id)}>Delete</button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </>
-        )}
-
-        {page === 'add' && (
-          <>
-            <div className="page-header"><span className="page-title">New project</span></div>
-            <div className="form-panel">
-              <div className="form-grid">
-                <div className="form-group"><label>Client name *</label><input type="text" value={fClient} onChange={e => setFClient(e.target.value)} placeholder="e.g. Acme Corp" /></div>
-                <div className="form-group"><label>Contact person</label><input type="text" value={fContact} onChange={e => setFContact(e.target.value)} /></div>
-                <div className="form-group"><label>Email</label><input type="email" value={fEmail} onChange={e => setFEmail(e.target.value)} /></div>
-                <div className="form-group"><label>Country</label><input type="text" value={fCountry} onChange={e => setFCountry(e.target.value)} /></div>
-                <div className="form-group"><label>Contract close date</label><input type="date" value={fDate} onChange={e => setFDate(e.target.value)} /></div>
-                <div className="form-group"><label>Channel</label>
-                  <select value={fChannel} onChange={e => setFChannel(e.target.value)}>
-                    <option value="UW">Upwork</option><option value="Direct">Direct</option><option value="Stripe">Stripe</option>
-                  </select>
-                </div>
-                <div className="form-group"><label>New / Repeat</label>
-                  <select value={fNewrep} onChange={e => setFNewrep(e.target.value)}>
-                    <option value="New">New</option><option value="Repeat">Repeat</option>
-                  </select>
-                </div>
-                <div className="form-group"><label>Booked amount ($) *</label><input type="number" value={fAmount} onChange={e => setFAmount(e.target.value)} placeholder="0.00" /></div>
-                <div className="form-group"><label>Project type</label><input type="text" value={fType} onChange={e => setFType(e.target.value)} placeholder="FM, Advisory, etc." /></div>
-                <div className="form-group"><label>Complexity</label>
-                  <select value={fComplexity} onChange={e => setFComplexity(e.target.value)}>
-                    <option>Wizard+</option><option>Complex</option><option>Standard</option><option>Simple</option>
-                  </select>
-                </div>
-                <div className="form-group full"><label>Project description</label><textarea value={fDesc} onChange={e => setFDesc(e.target.value)} rows={2} /></div>
-              </div>
-
-              <div className="section-label">Revenue allocation (%)</div>
-              <div className="alloc-grid">
-                {([['J', fJ, setFJ], ['M', fM, setFM], ['N', fN, setFN], ['A', fA, setFA], ['G', fG, setFG]] as [string, string, (v: string) => void][]).map(([k, v, set]) => (
-                  <div className="form-group" key={k}>
-                    <label style={{ color: ALLOC_COLORS[k] }}>{k}%</label>
-                    <input type="number" value={v} onChange={e => set(e.target.value)} min="0" max="100" placeholder="0" />
-                  </div>
-                ))}
-              </div>
-
-              {([
-                ['Invoice 1', fInv1, setFInv1],
-                ['Invoice 2 (optional)', fInv2, setFInv2],
-                ['Invoice 3 (optional)', fInv3, setFInv3],
-              ] as [string, Invoice, (v: Invoice) => void][]).map(([lbl, inv, setInv]) => (
-                <div key={lbl}>
-                  <div className="section-label">{lbl}</div>
-                  <div className="inv-section">
-                    <div className="inv-grid">
-                      <div className="form-group"><label>Invoice #</label><input type="text" value={inv.num} onChange={e => setInv({ ...inv, num: e.target.value })} /></div>
-                      <div className="form-group"><label>Date</label><input type="date" value={inv.date} onChange={e => setInv({ ...inv, date: e.target.value })} /></div>
-                      <div className="form-group"><label>Amount ($)</label><input type="number" value={inv.amt || ''} onChange={e => setInv({ ...inv, amt: +e.target.value })} /></div>
-                      <div className="form-group"><label>Due date</label><input type="date" value={inv.due} onChange={e => setInv({ ...inv, due: e.target.value })} /></div>
-                      <div className="form-group"><label>Date paid</label><input type="date" value={inv.paid} onChange={e => setInv({ ...inv, paid: e.target.value })} /></div>
-                      <div className="form-group"><label>Net received ($)</label><input type="number" value={inv.net || ''} onChange={e => setInv({ ...inv, net: +e.target.value })} /></div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-
-              <div style={{ marginTop: '1.25rem', display: 'flex', gap: 8, alignItems: 'center' }}>
-                <button className="btn btn-primary" onClick={addProject}>Save project</button>
-                <button className="btn" onClick={() => { resetForm(); setPage('projects') }}>Cancel</button>
-              </div>
-              {formMsg && <div className={formMsg.includes('saved') || formMsg.includes('!') ? 'form-msg-ok' : 'form-msg-err'}>{formMsg}</div>}
-            </div>
-          </>
-        )}
-
-        {page === 'detail' && detail && (
-          <>
-            <div className="page-header">
-              <button className="btn" onClick={() => setPage('projects')}>← Back</button>
-              <button className="btn btn-danger" onClick={() => setShowDeleteConfirm(detail.id)}>Delete project</button>
-            </div>
-            <div className="form-panel">
-              <div className="detail-header">
-                <div>
-                  <div className="detail-name">{detail.client}</div>
-                  <div className="detail-sub">
-                    {[detail.contact, detail.country, detail.email].filter(Boolean).join(' · ')}
-                  </div>
-                </div>
-                <div className="actions">
-                  <NewRepBadge newrep={detail.newrep} />
-                  <StatusBadge status={paymentStatus(detail)} />
-                  <ChannelBadge channel={detail.channel} />
-                </div>
-              </div>
-
-              <div className="detail-metrics">
-                <div className="metric"><div className="metric-label">Booked</div><div className="metric-value">{fmt(detail.amount)}</div></div>
-                <div className="metric"><div className="metric-label">Net received</div><div className="metric-value green">{fmt(totalNetReceived(detail))}</div></div>
-                <div className="metric"><div className="metric-label">Balance</div><div className={`metric-value ${remainingBalance(detail) > 0 ? 'amber' : ''}`}>{fmt(remainingBalance(detail))}</div></div>
-                <div className="metric"><div className="metric-label">Invoices</div><div className="metric-value">{detail.invoices.length}</div></div>
-              </div>
-
-              <div className="detail-meta">
-                {[
-                  ['Month', detail.month], ['Contract date', detail.date],
-                  ['Type', detail.type || '—'], ['Business model', detail.bm || '—'],
-                  ['Complexity', detail.complexity || '—'], ['Billing via', detail.billing],
-                ].map(([k, v]) => (
-                  <div className="detail-meta-item" key={k}><span className="detail-meta-key">{k}</span><span>{v}</span></div>
-                ))}
-              </div>
-
-              {detail.desc && (
-                <div style={{ background: 'var(--surface2)', borderRadius: 'var(--radius)', padding: '10px 12px', fontSize: 13, color: 'var(--text2)', marginBottom: '1rem' }}>
-                  {detail.desc}
-                </div>
-              )}
-
-              <div className="section-label">Revenue allocation</div>
-              <AllocBar alloc={detail.alloc} />
-
-              <div className="section-label" style={{ marginTop: '1.25rem' }}>Invoices</div>
-              {detail.invoices.map((inv, i) => (
-                <div className="inv-detail" key={i}>
-                  <div className="inv-detail-header">Invoice {i + 1}{inv.num ? ` — #${inv.num}` : ''}</div>
-                  <div className="inv-detail-grid">
-                    <div className="inv-detail-cell"><span className="inv-detail-cell-label">Date</span><span>{inv.date || '—'}</span></div>
-                    <div className="inv-detail-cell"><span className="inv-detail-cell-label">Amount</span><span className="amt">{fmt(inv.amt)}</span></div>
-                    <div className="inv-detail-cell"><span className="inv-detail-cell-label">Due</span><span>{inv.due || '—'}</span></div>
-                    <div className="inv-detail-cell"><span className="inv-detail-cell-label">Date paid</span><span className={inv.paid ? 'paid-yes' : 'paid-no'}>{inv.paid || 'Unpaid'}</span></div>
-                    <div className="inv-detail-cell"><span className="inv-detail-cell-label">Net received</span><span className="amt">{fmt(inv.net || 0)}</span></div>
-                    <div className="inv-detail-cell"><span className="inv-detail-cell-label">Platform fee</span><span className="amt" style={{ color: 'var(--text2)' }}>{fmt(inv.fee || 0)}</span></div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </>
-        )}
+              {sorted.map(p => {
+                const status = paymentStatus(p)
+                const bal = remainingBalance(p)
+                const net = totalNetReceived(p)
+                const nShare = numberlyShare(p)
+                return (
+                  <tr key={p.id} className={p.readyForBilling ? 'ready-row' : ''}>
+                    <td style={{ textAlign: 'center' }}>
+                      <input type="checkbox" checked={p.readyForBilling}
+                        onChange={e => updateField(p.id, 'readyForBilling', e.target.checked)}
+                        style={{ cursor: 'pointer' }}
+                        title="Mark as ready to bill" />
+                    </td>
+                    <td><InlineEdit id={p.id} field="month" value={p.month} /></td>
+                    <td><InlineEdit id={p.id} field="newrep" value={p.newrep} options={['New','Repeat']} /></td>
+                    <td><InlineEdit id={p.id} field="channel" value={p.channel} options={['UW','Direct','Stripe']} /></td>
+                    <td><InlineEdit id={p.id} field="delivery" value={p.delivery} /></td>
+                    <td style={{ fontWeight: 500, minWidth: 120 }}><InlineEdit id={p.id} field="startup" value={p.startup} /></td>
+                    <td><InlineEdit id={p.id} field="bm" value={p.bm} /></td>
+                    <td><InlineEdit id={p.id} field="complexity" value={p.complexity} options={['Wizard+','Complex','Standard','Simple','']} /></td>
+                    <td><InlineEdit id={p.id} field="soldBy" value={p.soldBy} /></td>
+                    <td><InlineEdit id={p.id} field="contact" value={p.contact} /></td>
+                    <td><InlineEdit id={p.id} field="country" value={p.country} /></td>
+                    <td><InlineEdit id={p.id} field="date" value={p.date} /></td>
+                    <td className="amt"><InlineEdit id={p.id} field="amount" value={p.amount} type="number" /></td>
+                    <td><InlineEdit id={p.id} field="billingThru" value={p.billingThru} options={['Upwork','Stripe','Direct']} /></td>
+                    <td><InlineEdit id={p.id} field="invoicingValue" value={p.invoicingValue} /></td>
+                    <td style={{ minWidth: 100 }}><AllocBar alloc={p.alloc} /></td>
+                    <td>
+                      <span className={`badge badge-${status === 'Fully paid' ? 'paid' : status === 'Partial' ? 'partial' : 'unpaid'}`}>{status}</span>
+                      {p.readyForBilling && <span className="badge badge-ready" style={{ marginLeft: 4 }}>Ready</span>}
+                    </td>
+                    <td className="amt" style={{ color: 'var(--green)' }}>{fmt(net)}</td>
+                    <td className="amt" style={{ color: bal > 0 ? 'var(--amber)' : 'var(--text3)', fontWeight: bal > 0 ? 500 : 400 }}>{fmt(bal)}</td>
+                    <td className="amt" style={{ color: '#378ADD' }}>{fmt(nShare)}</td>
+                    <td style={{ maxWidth: 160 }}><InlineEdit id={p.id} field="notes" value={p.notes} /></td>
+                    <td><button className="btn" style={{ fontSize: 11, padding: '3px 8px' }} onClick={() => setDetailId(p.id)}>Detail</button></td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      {showDeleteConfirm !== null && (
-        <div className="confirm-overlay" onClick={() => setShowDeleteConfirm(null)}>
-          <div className="confirm-box" onClick={e => e.stopPropagation()}>
-            <div className="confirm-title">Delete project?</div>
-            <div className="confirm-body">
-              This will permanently remove <strong>{projects.find(p => p.id === showDeleteConfirm)?.client}</strong> and all its invoices. This cannot be undone.
+      {/* DETAIL PANEL */}
+      {detail && (
+        <div className="panel-overlay" onClick={() => setDetailId(null)}>
+          <div className="panel" onClick={e => e.stopPropagation()}>
+            <div className="panel-header">
+              <div>
+                <div className="panel-name">{detail.startup || 'New project'}</div>
+                <div className="panel-sub">{[detail.contact, detail.country, detail.email].filter(Boolean).join(' · ')}</div>
+              </div>
+              <button className="btn" onClick={() => setDetailId(null)}>✕</button>
             </div>
-            <div className="confirm-actions">
-              <button className="btn" onClick={() => setShowDeleteConfirm(null)}>Cancel</button>
-              <button className="btn btn-danger" onClick={() => deleteProject(showDeleteConfirm!)}>Delete</button>
+
+            <div className="panel-metrics">
+              <div className="metric"><div className="metric-label">Booked</div><div className="metric-value" style={{ fontSize: 15 }}>{fmt(detail.amount)}</div></div>
+              <div className="metric"><div className="metric-label">Net received</div><div className="metric-value green" style={{ fontSize: 15 }}>{fmt(totalNetReceived(detail))}</div></div>
+              <div className="metric"><div className="metric-label">Balance</div><div className={`metric-value ${remainingBalance(detail) > 0 ? 'amber' : ''}`} style={{ fontSize: 15 }}>{fmt(remainingBalance(detail))}</div></div>
+            </div>
+
+            <div className="section-label">Project details</div>
+            <div className="panel-edit">
+              {([
+                ['Client / startup', 'startup', 'text'],
+                ['Month', 'month', 'text'],
+                ['New / Repeat', 'newrep', 'select', ['New','Repeat']],
+                ['Channel', 'channel', 'select', ['UW','Direct','Stripe']],
+                ['Delivery type', 'delivery', 'text'],
+                ['Business model', 'bm', 'text'],
+                ['Complexity', 'complexity', 'select', ['Wizard+','Complex','Standard','Simple','']],
+                ['Sold by', 'soldBy', 'text'],
+                ['Contact', 'contact', 'text'],
+                ['Email', 'email', 'text'],
+                ['Country', 'country', 'text'],
+                ['Contract date', 'date', 'text'],
+                ['Booked amount', 'amount', 'number'],
+                ['Billing thru', 'billingThru', 'select', ['Upwork','Stripe','Direct']],
+                ['Invoicing value', 'invoicingValue', 'text'],
+                ['Upwork name', 'upworkName', 'text'],
+              ] as [string, string, string, string[]?][]).map(([label, field, type, opts]) => (
+                <div className="pe-group" key={field}>
+                  <div className="pe-label">{label}</div>
+                  {opts ? (
+                    <select className="pe-input" value={String((detail as Record<string,unknown>)[field] || '')}
+                      onChange={e => updateField(detail.id, field, e.target.value)}>
+                      {opts.map(o => <option key={o} value={o}>{o}</option>)}
+                    </select>
+                  ) : (
+                    <input className="pe-input" type={type} value={String((detail as Record<string,unknown>)[field] || '')}
+                      onChange={e => updateField(detail.id, field, type === 'number' ? e.target.value : e.target.value)} />
+                  )}
+                </div>
+              ))}
+              <div className="pe-group full">
+                <div className="pe-label">Project description</div>
+                <textarea className="pe-input" rows={2} value={detail.desc}
+                  onChange={e => updateField(detail.id, 'desc', e.target.value)} />
+              </div>
+              <div className="pe-group full">
+                <div className="pe-label">Notes</div>
+                <textarea className="pe-input" rows={2} value={detail.notes}
+                  onChange={e => updateField(detail.id, 'notes', e.target.value)} />
+              </div>
+              <div className="pe-group full" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input type="checkbox" checked={detail.readyForBilling}
+                  onChange={e => updateField(detail.id, 'readyForBilling', e.target.checked)}
+                  id={`rfb-${detail.id}`} />
+                <label htmlFor={`rfb-${detail.id}`} style={{ fontSize: 12, color: 'var(--text)', cursor: 'pointer', textTransform: 'none', letterSpacing: 0 }}>
+                  Mark as ready to bill (work done, invoice not sent yet)
+                </label>
+              </div>
+            </div>
+
+            <div className="section-label">Revenue allocation</div>
+            <div className="alloc-row">
+              {(['J','M','N','A','G','S'] as (keyof Allocation)[]).map(k => (
+                <div className="alloc-cell" key={k}>
+                  <div className="alloc-key" style={{ color: ALLOC_COLORS[k] }}>{k}%</div>
+                  <input className="pe-input" type="number" min="0" max="100"
+                    value={detail.alloc[k] || ''}
+                    onChange={e => updateField(detail.id, `alloc.${k}`, e.target.value)}
+                    style={{ width: '100%', textAlign: 'center' }} />
+                </div>
+              ))}
+            </div>
+            <div style={{ marginTop: 8 }}><AllocBar alloc={detail.alloc} /></div>
+
+            <div className="section-label">Invoices</div>
+            {[0, 1, 2].map(i => {
+              const inv = detail.invoices[i]
+              const hasData = inv && (inv.num || inv.amt > 0)
+              if (!hasData && i > 0 && !detail.invoices[i - 1]) return null
+              return (
+                <div className="inv-card" key={i}>
+                  <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--text2)', marginBottom: 8 }}>
+                    Invoice {i + 1} {inv?.num ? `— #${inv.num}` : ''}
+                  </div>
+                  <div className="inv-grid">
+                    {([
+                      ['Invoice #','num','text'],['Date','date','text'],['Amount','amt','number'],
+                      ['Due date','due','text'],['Date paid','paid','text'],['Net received','net','number'],
+                    ] as [string,string,string][]).map(([label, key, type]) => (
+                      <div className="inv-cell" key={key}>
+                        <div className="inv-key">{label}</div>
+                        <input className="pe-input" type={type}
+                          value={String(inv?.[key as keyof Invoice] || '')}
+                          onChange={e => updateField(detail.id, `inv.${i}.${key}`, e.target.value)}
+                          style={{ fontSize: 11 }} />
+                      </div>
+                    ))}
+                  </div>
+                  {inv && (
+                    <div style={{ fontSize: 11, color: 'var(--text2)', marginTop: 6 }}>
+                      Fee: {fmt(Math.max(0, (inv.amt || 0) - (inv.net || 0)))} &nbsp;·&nbsp;
+                      Status: <span className={inv.paid ? 'paid-yes' : 'paid-no'}>{inv.paid ? 'Paid ' + inv.paid : 'Unpaid'}</span>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+
+            <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '0.5px solid var(--border)', display: 'flex', gap: 8 }}>
+              <button className="btn btn-danger" onClick={() => { if (confirm('Delete this project?')) deleteProject(detail.id) }}>Delete project</button>
             </div>
           </div>
         </div>
