@@ -26,6 +26,7 @@ create table public.projects (
   amount numeric not null default 0,
   billing_thru text not null default '',
   invoicing_value text not null default '',
+  booked_amount_status text not null default '',
   ready_for_billing boolean not null default false,
   notes text not null default '',
   invoices jsonb not null default '[]'::jsonb

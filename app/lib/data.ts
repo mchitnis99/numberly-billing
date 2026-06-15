@@ -35,19 +35,20 @@ export type Project = {
   amount: number
   billingThru: string
   invoicingValue: string
+  bookedAmountStatus: string
   readyForBilling: boolean
   notes: string
   invoices: Invoice[]
 }
 
 export const SAMPLE_PROJECTS: Project[] = [
-  {id:1,newrep:'New',month:'Jan 2025',channel:'UW',delivery:'FM',startup:'Sanctuary',bm:'Marketplace',modelDesc:'',soldBy:'M',alloc:{J:10,M:40,N:20,A:0,G:30,S:0},description:'',upworkName:'Jeanne Anderson',country:'US',contact:'Jeanne Anderson',email:'',date:'01/02/2025',amount:1500,billingThru:'Upwork',invoicingValue:'3 Milestones',readyForBilling:false,notes:'',invoices:[{num:'770653999',date:'01/19/2025',amt:500,due:'',paid:'01/19/2025',net:450,uwFee:50,stripeFee:0},{num:'779430780',date:'02/16/2025',amt:1000,due:'',paid:'02/16/2025',net:900,uwFee:100,stripeFee:0}]},
-  {id:2,newrep:'Repeat',month:'Jan 2025',channel:'UW',delivery:'FM',startup:'CornerstoneMD',bm:'Health Clinic',modelDesc:'',soldBy:'M',alloc:{J:0,M:40,N:30,A:0,G:30,S:0},description:'',upworkName:'Logan Ferrie',country:'US',contact:'Logan Ferrie',email:'logan@wellbridgehealth.co',date:'01/07/2025',amount:800,billingThru:'Upwork',invoicingValue:'1 Milestone',readyForBilling:false,notes:'',invoices:[{num:'773407570',date:'01/29/2025',amt:800,due:'',paid:'01/29/2025',net:720,uwFee:80,stripeFee:0}]},
-  {id:3,newrep:'New',month:'Jan 2025',channel:'UW',delivery:'FM',startup:'Advisory',bm:'Advisory',modelDesc:'',soldBy:'M',alloc:{J:0,M:70,N:30,A:0,G:0,S:0},description:'',upworkName:'Robin Van Lingen',country:'UK',contact:'Robin Van Lingen',email:'',date:'01/10/2025',amount:75,billingThru:'Upwork',invoicingValue:'100',readyForBilling:false,notes:'',invoices:[{num:'769296910',date:'01/15/2025',amt:75,due:'',paid:'01/15/2025',net:67.50,uwFee:7.50,stripeFee:0}]},
-  {id:4,newrep:'New',month:'Jan 2025',channel:'UW',delivery:'FM',startup:'Advisory',bm:'Advisory',modelDesc:'',soldBy:'M',alloc:{J:0,M:70,N:30,A:0,G:0,S:0},description:'',upworkName:'Ugochukwu Umeh',country:'US',contact:'Ugochukwu Umeh',email:'',date:'01/10/2025',amount:75,billingThru:'Upwork',invoicingValue:'100',readyForBilling:false,notes:'',invoices:[{num:'775270509',date:'01/03/2025',amt:75,due:'',paid:'01/03/2025',net:67.50,uwFee:7.50,stripeFee:0}]},
-  {id:5,newrep:'Repeat',month:'Jan 2025',channel:'UW',delivery:'FM Update',startup:'Intend',bm:'Bespoke',modelDesc:'',soldBy:'M',alloc:{J:0,M:70,N:30,A:0,G:0,S:0},description:'Summary tabs, staffing flexibility, MMCIF fixes',upworkName:'Celina Pena',country:'UK',contact:'Celina Pena',email:'',date:'01/12/2025',amount:1400,billingThru:'Upwork',invoicingValue:'2 Milestones',readyForBilling:false,notes:'',invoices:[{num:'777865065',date:'02/13/2025',amt:1400,due:'',paid:'02/13/2025',net:1260,uwFee:140,stripeFee:0}]},
-  {id:6,newrep:'New',month:'Jan 2025',channel:'UW',delivery:'FM',startup:'AILF',bm:'Consulting',modelDesc:'',soldBy:'M',alloc:{J:0,M:70,N:30,A:0,G:0,S:0},description:'',upworkName:'Lisa Yerebakan',country:'US',contact:'Lisa Yerebakan',email:'',date:'01/14/2025',amount:1000,billingThru:'Upwork',invoicingValue:'100',readyForBilling:false,notes:'',invoices:[{num:'777159550',date:'02/09/2025',amt:1000,due:'',paid:'02/09/2025',net:900,uwFee:100,stripeFee:0}]},
-  {id:7,newrep:'New',month:'Jan 2025',channel:'UW',delivery:'FM',startup:'RadiCath',bm:'Med Hardware',modelDesc:'',soldBy:'M',alloc:{J:0,M:40,N:30,A:0,G:30,S:0},description:'Radial catheter partner development model',upworkName:'Robin Van Lingen',country:'US',contact:'Robin Van Lingen',email:'',date:'01/14/2025',amount:2000,billingThru:'Upwork',invoicingValue:'100',readyForBilling:false,notes:'',invoices:[{num:'777590262',date:'02/11/2025',amt:500,due:'',paid:'02/11/2025',net:450,uwFee:50,stripeFee:0},{num:'784171937',date:'03/04/2025',amt:1500,due:'',paid:'03/04/2025',net:1350,uwFee:150,stripeFee:0}]},
+  {id:1,newrep:'New',month:'Jan 2025',channel:'UW',delivery:'FM',startup:'Sanctuary',bm:'Marketplace',modelDesc:'',soldBy:'M',alloc:{J:10,M:40,N:20,A:0,G:30,S:0},description:'',upworkName:'Jeanne Anderson',country:'US',contact:'Jeanne Anderson',email:'',date:'01/02/2025',amount:1500,billingThru:'Upwork',invoicingValue:'3 Milestones',bookedAmountStatus:'',readyForBilling:false,notes:'',invoices:[{num:'770653999',date:'01/19/2025',amt:500,due:'',paid:'01/19/2025',net:450,uwFee:50,stripeFee:0},{num:'779430780',date:'02/16/2025',amt:1000,due:'',paid:'02/16/2025',net:900,uwFee:100,stripeFee:0}]},
+  {id:2,newrep:'Repeat',month:'Jan 2025',channel:'UW',delivery:'FM',startup:'CornerstoneMD',bm:'Health Clinic',modelDesc:'',soldBy:'M',alloc:{J:0,M:40,N:30,A:0,G:30,S:0},description:'',upworkName:'Logan Ferrie',country:'US',contact:'Logan Ferrie',email:'logan@wellbridgehealth.co',date:'01/07/2025',amount:800,billingThru:'Upwork',invoicingValue:'1 Milestone',bookedAmountStatus:'',readyForBilling:false,notes:'',invoices:[{num:'773407570',date:'01/29/2025',amt:800,due:'',paid:'01/29/2025',net:720,uwFee:80,stripeFee:0}]},
+  {id:3,newrep:'New',month:'Jan 2025',channel:'UW',delivery:'FM',startup:'Advisory',bm:'Advisory',modelDesc:'',soldBy:'M',alloc:{J:0,M:70,N:30,A:0,G:0,S:0},description:'',upworkName:'Robin Van Lingen',country:'UK',contact:'Robin Van Lingen',email:'',date:'01/10/2025',amount:75,billingThru:'Upwork',invoicingValue:'100',bookedAmountStatus:'',readyForBilling:false,notes:'',invoices:[{num:'769296910',date:'01/15/2025',amt:75,due:'',paid:'01/15/2025',net:67.50,uwFee:7.50,stripeFee:0}]},
+  {id:4,newrep:'New',month:'Jan 2025',channel:'UW',delivery:'FM',startup:'Advisory',bm:'Advisory',modelDesc:'',soldBy:'M',alloc:{J:0,M:70,N:30,A:0,G:0,S:0},description:'',upworkName:'Ugochukwu Umeh',country:'US',contact:'Ugochukwu Umeh',email:'',date:'01/10/2025',amount:75,billingThru:'Upwork',invoicingValue:'100',bookedAmountStatus:'',readyForBilling:false,notes:'',invoices:[{num:'775270509',date:'01/03/2025',amt:75,due:'',paid:'01/03/2025',net:67.50,uwFee:7.50,stripeFee:0}]},
+  {id:5,newrep:'Repeat',month:'Jan 2025',channel:'UW',delivery:'FM Update',startup:'Intend',bm:'Bespoke',modelDesc:'',soldBy:'M',alloc:{J:0,M:70,N:30,A:0,G:0,S:0},description:'Summary tabs, staffing flexibility, MMCIF fixes',upworkName:'Celina Pena',country:'UK',contact:'Celina Pena',email:'',date:'01/12/2025',amount:1400,billingThru:'Upwork',invoicingValue:'2 Milestones',bookedAmountStatus:'',readyForBilling:false,notes:'',invoices:[{num:'777865065',date:'02/13/2025',amt:1400,due:'',paid:'02/13/2025',net:1260,uwFee:140,stripeFee:0}]},
+  {id:6,newrep:'New',month:'Jan 2025',channel:'UW',delivery:'FM',startup:'AILF',bm:'Consulting',modelDesc:'',soldBy:'M',alloc:{J:0,M:70,N:30,A:0,G:0,S:0},description:'',upworkName:'Lisa Yerebakan',country:'US',contact:'Lisa Yerebakan',email:'',date:'01/14/2025',amount:1000,billingThru:'Upwork',invoicingValue:'100',bookedAmountStatus:'',readyForBilling:false,notes:'',invoices:[{num:'777159550',date:'02/09/2025',amt:1000,due:'',paid:'02/09/2025',net:900,uwFee:100,stripeFee:0}]},
+  {id:7,newrep:'New',month:'Jan 2025',channel:'UW',delivery:'FM',startup:'RadiCath',bm:'Med Hardware',modelDesc:'',soldBy:'M',alloc:{J:0,M:40,N:30,A:0,G:30,S:0},description:'Radial catheter partner development model',upworkName:'Robin Van Lingen',country:'US',contact:'Robin Van Lingen',email:'',date:'01/14/2025',amount:2000,billingThru:'Upwork',invoicingValue:'100',bookedAmountStatus:'',readyForBilling:false,notes:'',invoices:[{num:'777590262',date:'02/11/2025',amt:500,due:'',paid:'02/11/2025',net:450,uwFee:50,stripeFee:0},{num:'784171937',date:'03/04/2025',amt:1500,due:'',paid:'03/04/2025',net:1350,uwFee:150,stripeFee:0}]},
 ]
 
 // Shape of a row in the Supabase `projects` table (snake_case columns)
@@ -76,6 +77,7 @@ type ProjectRow = {
   amount: number
   billing_thru: string
   invoicing_value: string
+  booked_amount_status: string
   ready_for_billing: boolean
   notes: string
   invoices: Invoice[]
@@ -102,6 +104,7 @@ function rowToProject(r: ProjectRow): Project {
     amount: r.amount,
     billingThru: r.billing_thru,
     invoicingValue: r.invoicing_value,
+    bookedAmountStatus: r.booked_amount_status,
     readyForBilling: r.ready_for_billing,
     notes: r.notes,
     invoices: r.invoices || [],
@@ -133,6 +136,7 @@ function projectToRow(p: Project): Omit<ProjectRow, 'id'> {
     amount: p.amount,
     billing_thru: p.billingThru,
     invoicing_value: p.invoicingValue,
+    booked_amount_status: p.bookedAmountStatus,
     ready_for_billing: p.readyForBilling,
     notes: p.notes,
     invoices: p.invoices,
@@ -256,6 +260,7 @@ export function parseCSVRow(headers: string[], row: string[]): Partial<Project> 
     amount: parseAmt(get('booked amount')),
     billingThru: get('billing thru') || get('billing through'),
     invoicingValue: get('invoicing value'),
+    bookedAmountStatus: get('booked amount status'),
     notes: get('notes'),
     readyForBilling: false,
     invoices,

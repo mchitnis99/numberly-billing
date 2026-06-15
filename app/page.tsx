@@ -18,6 +18,7 @@ function emptyProject(id: number): Project {
     id, newrep: 'New', month: '', channel: 'UW', delivery: 'FM', startup: '', bm: '',
     modelDesc: '', soldBy: 'M', alloc: emptyAlloc(), description: '', upworkName: '', country: 'US',
     contact: '', email: '', date: '', amount: 0, billingThru: 'UW', invoicingValue: '',
+    bookedAmountStatus: 'Active',
     readyForBilling: false, notes: '', invoices: [emptyInv()]
   }
 }
@@ -285,12 +286,12 @@ export default function App() {
         .table-wrap::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 6px; }
         .table-wrap::-webkit-scrollbar-thumb:hover { background: var(--text3); }
         .scroll-hint { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--text3); margin-bottom: 4px; }
-        table { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 1200px; }
+        table { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 1700px; table-layout: fixed; }
         thead { position: sticky; top: 0; z-index: 5; }
-        th { background: var(--surface2); font-weight: 500; color: var(--text2); padding: 7px 10px; text-align: left; border-bottom: 0.5px solid var(--border); font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; cursor: pointer; user-select: none; }
+        th { background: var(--surface2); font-weight: 500; color: var(--text2); padding: 7px 10px; text-align: left; border-bottom: 0.5px solid var(--border); font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; cursor: pointer; user-select: none; overflow: hidden; text-overflow: ellipsis; }
         th:hover { color: var(--text); }
         th.sorted { color: var(--text); }
-        td { padding: 6px 10px; border-bottom: 0.5px solid var(--border); color: var(--text); vertical-align: middle; white-space: nowrap; }
+        td { padding: 6px 10px; border-bottom: 0.5px solid var(--border); color: var(--text); vertical-align: middle; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         tr:last-child td { border-bottom: none; }
         tr:hover td { background: var(--surface2); }
         tr.ready-row td { background: rgba(186,117,23,0.04); }
@@ -389,6 +390,28 @@ export default function App() {
         <div className="scroll-hint">↔ Scroll horizontally to see all columns</div>
         <div className="table-wrap">
           <table>
+            <colgroup>
+              <col style={{ width: 36 }} />
+              <col style={{ width: 64 }} />
+              <col style={{ width: 64 }} />
+              <col style={{ width: 76 }} />
+              <col style={{ width: 64 }} />
+              <col style={{ width: 130 }} />
+              <col style={{ width: 110 }} />
+              <col style={{ width: 56 }} />
+              <col style={{ width: 110 }} />
+              <col style={{ width: 64 }} />
+              <col style={{ width: 86 }} />
+              <col style={{ width: 80 }} />
+              <col style={{ width: 90 }} />
+              <col style={{ width: 100 }} />
+              <col style={{ width: 110 }} />
+              <col style={{ width: 86 }} />
+              <col style={{ width: 80 }} />
+              <col style={{ width: 80 }} />
+              <col style={{ width: 160 }} />
+              <col style={{ width: 64 }} />
+            </colgroup>
             <thead>
               <tr>
                 <th onClick={() => toggleSort('readyForBilling')} className={sortKey==='readyForBilling'?'sorted':''}>Bill<span className="sort-arrow">{sortKey==='readyForBilling'?(sortDir==='asc'?'↑':'↓'):'↕'}</span></th>
@@ -403,6 +426,7 @@ export default function App() {
                 <th>Country</th>
                 <th onClick={() => toggleSort('date')} className={sortKey==='date'?'sorted':''}>Contract date<span className="sort-arrow">{sortKey==='date'?(sortDir==='asc'?'↑':'↓'):'↕'}</span></th>
                 <th onClick={() => toggleSort('amount')} className={sortKey==='amount'?'sorted':''}>Booked<span className="sort-arrow">{sortKey==='amount'?(sortDir==='asc'?'↑':'↓'):'↕'}</span></th>
+                <th>Bkd status</th>
                 <th>Billing thru</th>
                 <th>Allocation</th>
                 <th onClick={() => toggleSort('status')} className={sortKey==='status'?'sorted':''}>Status<span className="sort-arrow">{sortKey==='status'?(sortDir==='asc'?'↑':'↓'):'↕'}</span></th>
@@ -414,7 +438,7 @@ export default function App() {
             </thead>
             <tbody>
               {sorted.length === 0 && (
-                <tr><td colSpan={19}><div className="empty">{loading ? 'Loading projects…' : 'No projects found'}</div></td></tr>
+                <tr><td colSpan={20}><div className="empty">{loading ? 'Loading projects…' : 'No projects found'}</div></td></tr>
               )}
               {sorted.map(p => {
                 const status = paymentStatus(p)
@@ -439,6 +463,7 @@ export default function App() {
                     <td><InlineEdit id={p.id} field="country" value={p.country} /></td>
                     <td><InlineEdit id={p.id} field="date" value={p.date} /></td>
                     <td className="amt"><InlineEdit id={p.id} field="amount" value={p.amount} type="number" /></td>
+                    <td><InlineEdit id={p.id} field="bookedAmountStatus" value={p.bookedAmountStatus} options={['Fully paid','Partial','Active','On hold']} /></td>
                     <td><InlineEdit id={p.id} field="billingThru" value={p.billingThru} options={['UW','Stripe','Bank Transfer','Open Link']} /></td>
                     <td style={{ minWidth: 100 }}><AllocBar alloc={p.alloc} /></td>
                     <td>
@@ -504,6 +529,7 @@ export default function App() {
                 ['Country', 'country', 'text'],
                 ['Contract date', 'date', 'text'],
                 ['Booked amount', 'amount', 'number'],
+                ['Booked amount status', 'bookedAmountStatus', 'select', ['Fully paid','Partial','Active','On hold']],
                 ['Billing thru', 'billingThru', 'select', ['UW','Stripe','Bank Transfer','Open Link']],
                 ['Upwork name', 'upworkName', 'text'],
               ] as [string, string, string, string[]?][]).map(([label, field, type, opts]) => (
