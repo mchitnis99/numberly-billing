@@ -212,10 +212,27 @@ export function parseCSVRow(headers: string[], row: string[]): Partial<Project> 
     const i = headers.findIndex(h => h.trim().toLowerCase().includes(name.toLowerCase()))
     return i >= 0 ? (row[i] || '').trim() : ''
   }
+  // Finds the value of the Nth (0-indexed) header containing `name` — used for
+  // columns like "Due date" / "Payment date" that repeat once per invoice.
+  const getNth = (name: string, n: number) => {
+    let count = 0
+    for (let idx = 0; idx < headers.length; idx++) {
+      if (headers[idx].trim().toLowerCase().includes(name.toLowerCase())) {
+        if (count === n) return (row[idx] || '').trim()
+        count++
+      }
+    }
+    return ''
+  }
   const client = get('startup') || get('client')
   if (!client) return null
 
   const parseAmt = (s: string) => parseFloat(s.replace(/[$,]/g, '')) || 0
+
+  // "Booked Amount" vs "Booked Amount status" — prefer an exact header match so the
+  // status column (which also contains "booked amount") doesn't shadow this lookup.
+  const bookedAmountIdx = headers.findIndex(h => h.trim().toLowerCase() === 'booked amount')
+  const bookedAmount = bookedAmountIdx >= 0 ? (row[bookedAmountIdx] || '') : get('booked amount')
 
   const allocKeys = ['J%','M%','N%','A%','G%','S%']
   const alloc: Allocation = { J:0, M:0, N:0, A:0, G:0, S:0 }
@@ -228,15 +245,20 @@ export function parseCSVRow(headers: string[], row: string[]): Partial<Project> 
     }
   })
 
-  // Parse invoices
+  // Parse invoices — "Due date", "Payment date", "Net received Stripe/Upwork" and
+  // "Stripe/Upwork fee" each appear once per invoice, so look them up by occurrence index.
   const invoices: Invoice[] = []
   for (let i = 1; i <= 3; i++) {
-    const num = get(`${i}${i===1?'st':i===2?'nd':'rd'} invoice number`) || get(`invoice number ${i}`)
-    const date = get(`${i}${i===1?'st':i===2?'nd':'rd'} invoice date`) || get(`invoice date ${i}`)
-    const amt = parseAmt(get(`${i}${i===1?'st':i===2?'nd':'rd'} invoice amount`) || get(`invoice amount ${i}`))
-    const net = parseAmt(get(`net received stripe`) || '')
+    const ord = i === 1 ? 'st' : i === 2 ? 'nd' : 'rd'
+    const num = get(`${i}${ord} invoice number`) || get(`invoice number ${i}`)
+    const date = get(`${i}${ord} invoice date`) || get(`invoice date ${i}`)
+    const amt = parseAmt(get(`${i}${ord} invoice amount`) || get(`invoice amount ${i}`))
+    const due = getNth('due date', i - 1)
+    const paid = getNth('payment date', i - 1)
+    const net = parseAmt(getNth('net received', i - 1))
+    const stripeFee = parseAmt(getNth('stripe/upwork fee', i - 1))
     if (amt > 0 || num) {
-      invoices.push({ num: num || '', date: date || '', amt, due: '', paid: '', net, uwFee: 0, stripeFee: Math.max(0, amt - net) })
+      invoices.push({ num: num || '', date: date || '', amt, due, paid, net, uwFee: 0, stripeFee })
     }
   }
   if (invoices.length === 0) invoices.push({ num: '', date: '', amt: 0, due: '', paid: '', net: 0, uwFee: 0, stripeFee: 0 })
@@ -257,7 +279,7 @@ export function parseCSVRow(headers: string[], row: string[]): Partial<Project> 
     contact: get('contact'),
     email: get('email'),
     date: get('contract close date'),
-    amount: parseAmt(get('booked amount')),
+    amount: parseAmt(bookedAmount),
     billingThru: get('billing thru') || get('billing through'),
     invoicingValue: get('invoicing value'),
     bookedAmountStatus: get('booked amount status'),
