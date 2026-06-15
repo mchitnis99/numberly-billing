@@ -1,28 +1,23 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Project, Invoice, Allocation, SAMPLE_PROJECTS, paymentStatus, totalNetReceived, remainingBalance, numberlyShare, fmt, ALLOC_COLORS, parseCSVRow } from './lib/data'
+import {
+  Project, Invoice, Allocation, paymentStatus, totalNetReceived, remainingBalance, invoiceNet, fmt, ALLOC_COLORS, parseCSVRow,
+  fetchProjects, insertProject, insertProjects, upsertProject, deleteProject as deleteProjectRow,
+} from './lib/data'
 import { AllocBar } from './components/AllocBar'
-
-const STORAGE_KEY = 'nb_billing_v2'
-
-function load(): Project[] {
-  if (typeof window === 'undefined') return SAMPLE_PROJECTS
-  try { const s = localStorage.getItem(STORAGE_KEY); return s ? JSON.parse(s) : SAMPLE_PROJECTS } catch { return SAMPLE_PROJECTS }
-}
-function save(p: Project[]) { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(p)) } catch {} }
 
 type SortKey = 'month' | 'client' | 'amount' | 'balance' | 'status' | 'date' | 'readyForBilling'
 type View = 'all' | 'outstanding' | 'ready' | 'paid'
 
-const emptyInv = (): Invoice => ({ num: '', date: '', amt: 0, due: '', paid: '', net: 0, fee: 0 })
+const emptyInv = (): Invoice => ({ num: '', date: '', amt: 0, due: '', paid: '', net: 0, uwFee: 0, stripeFee: 0 })
 const emptyAlloc = (): Allocation => ({ J: 0, M: 0, N: 0, A: 0, G: 0, S: 0 })
 
 function emptyProject(id: number): Project {
   return {
-    id, newrep: 'New', month: '', channel: 'UW', delivery: 'FM', startup: '', bm: '', complexity: '',
-    modelDesc: '', soldBy: 'M', alloc: emptyAlloc(), desc: '', upworkName: '', country: 'US',
-    contact: '', email: '', date: '', amount: 0, billingThru: 'Upwork', invoicingValue: '',
+    id, newrep: 'New', month: '', channel: 'UW', delivery: 'FM', startup: '', bm: '',
+    modelDesc: '', soldBy: 'M', alloc: emptyAlloc(), description: '', upworkName: '', country: 'US',
+    contact: '', email: '', date: '', amount: 0, billingThru: 'UW', invoicingValue: '',
     readyForBilling: false, notes: '', invoices: [emptyInv()]
   }
 }
@@ -40,15 +35,31 @@ export default function App() {
   const [showImport, setShowImport] = useState(false)
   const [importMsg, setImportMsg] = useState('')
   const [showAddRow, setShowAddRow] = useState(false)
+  const [loading, setLoading] = useState(true)
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const fileRef = useRef<HTMLInputElement>(null)
 
-  useEffect(() => { setProjects(load()) }, [])
+  useEffect(() => {
+    let cancelled = false
+    fetchProjects()
+      .then(data => { if (!cancelled) setProjects(data) })
+      .catch(err => console.error('Failed to load projects', err))
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [])
 
-  const mutate = useCallback((updated: Project[]) => { setProjects(updated); save(updated) }, [])
+  // Updates a single project locally and persists just that row to Supabase
+  const mutateProject = useCallback((id: number, updater: (p: Project) => Project) => {
+    setProjects(prev => {
+      const updated = prev.map(p => p.id === id ? updater(p) : p)
+      const changed = updated.find(p => p.id === id)
+      if (changed) upsertProject(changed).catch(err => console.error('Failed to save project', err))
+      return updated
+    })
+  }, [])
 
   function updateField(id: number, field: string, value: string | number | boolean) {
-    mutate(projects.map(p => {
-      if (p.id !== id) return p
+    mutateProject(id, p => {
       if (field.startsWith('alloc.')) {
         const k = field.split('.')[1] as keyof Allocation
         return { ...p, alloc: { ...p.alloc, [k]: +(value as string) || 0 } }
@@ -58,51 +69,72 @@ export default function App() {
         const i = parseInt(iStr)
         const invs = [...p.invoices]
         while (invs.length <= i) invs.push(emptyInv())
-        invs[i] = { ...invs[i], [key]: key === "amt" || key === "net" || key === "fee" ? +(value as string) || 0 : value }
-        if (key === 'net' || key === 'amt') invs[i].fee = Math.max(0, invs[i].amt - invs[i].net)
+        const numericKeys = ['amt', 'net', 'uwFee', 'stripeFee']
+        invs[i] = { ...invs[i], [key]: numericKeys.includes(key) ? +(value as string) || 0 : value }
+        if (key === 'amt' || key === 'uwFee' || key === 'stripeFee') {
+          invs[i].net = Math.max(0, invs[i].amt - invs[i].uwFee - invs[i].stripeFee)
+        }
         return { ...p, invoices: invs }
       }
       return { ...p, [field]: field === "amount" ? +(value as string) || 0 : value }
-    }))
+    })
   }
 
-  function addProject() {
-    const id = projects.length > 0 ? Math.max(...projects.map(p => p.id)) + 1 : 1
+  async function addProject() {
     const now = new Date()
     const month = now.toLocaleString('en-US', { month: 'short' }) + ' ' + now.getFullYear()
-    const p = { ...emptyProject(id), month }
-    mutate([...projects, p])
-    setDetailId(id)
-    setShowAddRow(false)
+    try {
+      const created = await insertProject({ ...emptyProject(0), month })
+      setProjects(prev => [...prev, created])
+      openDetail(created.id)
+      setShowAddRow(false)
+    } catch (err) {
+      console.error('Failed to add project', err)
+    }
   }
 
-  function deleteProject(id: number) {
-    mutate(projects.filter(p => p.id !== id))
-    setDetailId(null)
+  async function deleteProject(id: number) {
+    setProjects(prev => prev.filter(p => p.id !== id))
+    openDetail(null)
+    try { await deleteProjectRow(id) } catch (err) { console.error('Failed to delete project', err) }
+  }
+
+  async function saveDetail(p: Project) {
+    setSaveStatus('saving')
+    try {
+      await upsertProject(p)
+      setSaveStatus('saved')
+      setTimeout(() => setSaveStatus('idle'), 1500)
+    } catch (err) {
+      console.error('Failed to save project', err)
+      setSaveStatus('error')
+    }
   }
 
   function handleCSV(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
     const reader = new FileReader()
-    reader.onload = (ev) => {
+    reader.onload = async (ev) => {
       const text = ev.target?.result as string
       const lines = text.split('\n').filter(l => l.trim())
       if (lines.length < 2) { setImportMsg('File appears empty.'); return }
       const headers = parseCSVLine(lines[0])
-      let imported = 0, skipped = 0
-      const newProjects: Project[] = [...projects]
-      let nextId = projects.length > 0 ? Math.max(...projects.map(p => p.id)) + 1 : 1
+      let skipped = 0
+      const drafts: Project[] = []
       for (let i = 1; i < lines.length; i++) {
         const row = parseCSVLine(lines[i])
         const partial = parseCSVRow(headers, row)
         if (!partial || !partial.startup) { skipped++; continue }
-        const p: Project = { ...emptyProject(nextId++), ...partial } as Project
-        newProjects.push(p)
-        imported++
+        drafts.push({ ...emptyProject(0), ...partial } as Project)
       }
-      mutate(newProjects)
-      setImportMsg(`Imported ${imported} rows${skipped > 0 ? `, skipped ${skipped}` : ''}.`)
+      try {
+        const created = drafts.length > 0 ? await insertProjects(drafts) : []
+        setProjects(prev => [...prev, ...created])
+        setImportMsg(`Imported ${created.length} rows${skipped > 0 ? `, skipped ${skipped}` : ''}.`)
+      } catch (err) {
+        setImportMsg(`Import failed: ${err instanceof Error ? err.message : String(err)}`)
+      }
     }
     reader.readAsText(file)
   }
@@ -152,6 +184,11 @@ export default function App() {
     else { setSortKey(k); setSortDir('desc') }
   }
 
+  function openDetail(id: number | null) {
+    setDetailId(id)
+    setSaveStatus('idle')
+  }
+
   const detail = projects.find(p => p.id === detailId)
 
   // Metrics
@@ -159,7 +196,6 @@ export default function App() {
   const totalCollected = projects.reduce((s, p) => s + totalNetReceived(p), 0)
   const totalOutstanding = projects.reduce((s, p) => s + remainingBalance(p), 0)
   const readyCount = projects.filter(p => p.readyForBilling).length
-  const numberlyTotal = projects.reduce((s, p) => s + numberlyShare(p), 0)
 
   function InlineEdit({ id, field, value, type = 'text', options }: {
     id: number; field: string; value: string | number | boolean; type?: string; options?: string[]
@@ -244,6 +280,11 @@ export default function App() {
         .btn-danger:hover { background: var(--red-bg); }
         .btn-ready { background: var(--amber-bg); color: var(--amber-text); border-color: transparent; }
         .table-wrap { border: 0.5px solid var(--border); border-radius: var(--radius-lg); overflow: auto; max-height: calc(100vh - 260px); }
+        .table-wrap::-webkit-scrollbar { height: 12px; }
+        .table-wrap::-webkit-scrollbar-track { background: var(--surface2); }
+        .table-wrap::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 6px; }
+        .table-wrap::-webkit-scrollbar-thumb:hover { background: var(--text3); }
+        .scroll-hint { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--text3); margin-bottom: 4px; }
         table { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 1200px; }
         thead { position: sticky; top: 0; z-index: 5; }
         th { background: var(--surface2); font-weight: 500; color: var(--text2); padding: 7px 10px; text-align: left; border-bottom: 0.5px solid var(--border); font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; cursor: pointer; user-select: none; }
@@ -272,7 +313,7 @@ export default function App() {
         .panel-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.25rem; }
         .panel-name { font-size: 18px; font-weight: 500; }
         .panel-sub { font-size: 12px; color: var(--text2); margin-top: 2px; }
-        .panel-metrics { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; margin-bottom: 1rem; }
+        .panel-metrics { display: grid; grid-template-columns: repeat(4,1fr); gap: 8px; margin-bottom: 1rem; }
         .section-label { font-size: 10px; font-weight: 500; color: var(--text2); text-transform: uppercase; letter-spacing: 0.07em; margin: 1rem 0 0.5rem; }
         .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 16px; font-size: 12px; }
         .detail-item { display: flex; flex-direction: column; gap: 2px; }
@@ -320,7 +361,6 @@ export default function App() {
           <div className="metric"><div className="metric-label">Total booked</div><div className="metric-value">{fmt(totalBooked)}</div></div>
           <div className="metric"><div className="metric-label">Collected (net)</div><div className="metric-value green">{fmt(totalCollected)}</div></div>
           <div className="metric"><div className="metric-label">Outstanding</div><div className="metric-value amber">{fmt(totalOutstanding)}</div></div>
-          <div className="metric"><div className="metric-label">Numberly share</div><div className="metric-value blue">{fmt(numberlyTotal)}</div></div>
           <div className="metric"><div className="metric-label">Ready to bill</div><div className="metric-value amber">{readyCount}</div></div>
           <div className="metric"><div className="metric-label">Projects</div><div className="metric-value">{projects.length}</div></div>
         </div>
@@ -346,6 +386,7 @@ export default function App() {
           {search && <button className="btn" onClick={() => setSearch('')}>Clear</button>}
         </div>
 
+        <div className="scroll-hint">↔ Scroll horizontally to see all columns</div>
         <div className="table-wrap">
           <table>
             <thead>
@@ -357,32 +398,28 @@ export default function App() {
                 <th>Delivery</th>
                 <th onClick={() => toggleSort('client')} className={sortKey==='client'?'sorted':''}>Client<span className="sort-arrow">{sortKey==='client'?(sortDir==='asc'?'↑':'↓'):'↕'}</span></th>
                 <th>Business model</th>
-                <th>Complexity</th>
                 <th>Sold by</th>
                 <th>Contact</th>
                 <th>Country</th>
                 <th onClick={() => toggleSort('date')} className={sortKey==='date'?'sorted':''}>Contract date<span className="sort-arrow">{sortKey==='date'?(sortDir==='asc'?'↑':'↓'):'↕'}</span></th>
                 <th onClick={() => toggleSort('amount')} className={sortKey==='amount'?'sorted':''}>Booked<span className="sort-arrow">{sortKey==='amount'?(sortDir==='asc'?'↑':'↓'):'↕'}</span></th>
                 <th>Billing thru</th>
-                <th>Inv. value</th>
                 <th>Allocation</th>
                 <th onClick={() => toggleSort('status')} className={sortKey==='status'?'sorted':''}>Status<span className="sort-arrow">{sortKey==='status'?(sortDir==='asc'?'↑':'↓'):'↕'}</span></th>
                 <th>Net recv.</th>
                 <th onClick={() => toggleSort('balance')} className={sortKey==='balance'?'sorted':''}>Balance<span className="sort-arrow">{sortKey==='balance'?(sortDir==='asc'?'↑':'↓'):'↕'}</span></th>
-                <th>Numberly share</th>
                 <th>Notes</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
               {sorted.length === 0 && (
-                <tr><td colSpan={22}><div className="empty">No projects found</div></td></tr>
+                <tr><td colSpan={19}><div className="empty">{loading ? 'Loading projects…' : 'No projects found'}</div></td></tr>
               )}
               {sorted.map(p => {
                 const status = paymentStatus(p)
                 const bal = remainingBalance(p)
                 const net = totalNetReceived(p)
-                const nShare = numberlyShare(p)
                 return (
                   <tr key={p.id} className={p.readyForBilling ? 'ready-row' : ''}>
                     <td style={{ textAlign: 'center' }}>
@@ -393,18 +430,16 @@ export default function App() {
                     </td>
                     <td><InlineEdit id={p.id} field="month" value={p.month} /></td>
                     <td><InlineEdit id={p.id} field="newrep" value={p.newrep} options={['New','Repeat']} /></td>
-                    <td><InlineEdit id={p.id} field="channel" value={p.channel} options={['UW','Direct','Stripe']} /></td>
+                    <td><InlineEdit id={p.id} field="channel" value={p.channel} options={['UW','Repeat','Referral','Website']} /></td>
                     <td><InlineEdit id={p.id} field="delivery" value={p.delivery} /></td>
                     <td style={{ fontWeight: 500, minWidth: 120 }}><InlineEdit id={p.id} field="startup" value={p.startup} /></td>
                     <td><InlineEdit id={p.id} field="bm" value={p.bm} /></td>
-                    <td><InlineEdit id={p.id} field="complexity" value={p.complexity} options={['Wizard+','Complex','Standard','Simple','']} /></td>
                     <td><InlineEdit id={p.id} field="soldBy" value={p.soldBy} /></td>
                     <td><InlineEdit id={p.id} field="contact" value={p.contact} /></td>
                     <td><InlineEdit id={p.id} field="country" value={p.country} /></td>
                     <td><InlineEdit id={p.id} field="date" value={p.date} /></td>
                     <td className="amt"><InlineEdit id={p.id} field="amount" value={p.amount} type="number" /></td>
-                    <td><InlineEdit id={p.id} field="billingThru" value={p.billingThru} options={['Upwork','Stripe','Direct']} /></td>
-                    <td><InlineEdit id={p.id} field="invoicingValue" value={p.invoicingValue} /></td>
+                    <td><InlineEdit id={p.id} field="billingThru" value={p.billingThru} options={['UW','Stripe','Bank Transfer','Open Link']} /></td>
                     <td style={{ minWidth: 100 }}><AllocBar alloc={p.alloc} /></td>
                     <td>
                       <span className={`badge badge-${status === 'Fully paid' ? 'paid' : status === 'Partial' ? 'partial' : 'unpaid'}`}>{status}</span>
@@ -412,9 +447,8 @@ export default function App() {
                     </td>
                     <td className="amt" style={{ color: 'var(--green)' }}>{fmt(net)}</td>
                     <td className="amt" style={{ color: bal > 0 ? 'var(--amber)' : 'var(--text3)', fontWeight: bal > 0 ? 500 : 400 }}>{fmt(bal)}</td>
-                    <td className="amt" style={{ color: '#378ADD' }}>{fmt(nShare)}</td>
                     <td style={{ maxWidth: 160 }}><InlineEdit id={p.id} field="notes" value={p.notes} /></td>
-                    <td><button className="btn" style={{ fontSize: 11, padding: '3px 8px' }} onClick={() => setDetailId(p.id)}>Detail</button></td>
+                    <td><button className="btn" style={{ fontSize: 11, padding: '3px 8px' }} onClick={() => openDetail(p.id)}>Detail</button></td>
                   </tr>
                 )
               })}
@@ -425,20 +459,34 @@ export default function App() {
 
       {/* DETAIL PANEL */}
       {detail && (
-        <div className="panel-overlay" onClick={() => setDetailId(null)}>
+        <div className="panel-overlay" onClick={() => openDetail(null)}>
           <div className="panel" onClick={e => e.stopPropagation()}>
             <div className="panel-header">
               <div>
                 <div className="panel-name">{detail.startup || 'New project'}</div>
                 <div className="panel-sub">{[detail.contact, detail.country, detail.email].filter(Boolean).join(' · ')}</div>
               </div>
-              <button className="btn" onClick={() => setDetailId(null)}>✕</button>
+              <div style={{ display: 'flex', gap: 6 }}>
+                <button className="btn btn-primary" onClick={() => saveDetail(detail)}>
+                  {saveStatus === 'saving' ? 'Saving…' : saveStatus === 'saved' ? 'Saved ✓' : saveStatus === 'error' ? 'Retry save' : 'Save'}
+                </button>
+                <button className="btn" onClick={() => openDetail(null)}>✕</button>
+              </div>
             </div>
 
             <div className="panel-metrics">
               <div className="metric"><div className="metric-label">Booked</div><div className="metric-value" style={{ fontSize: 15 }}>{fmt(detail.amount)}</div></div>
               <div className="metric"><div className="metric-label">Net received</div><div className="metric-value green" style={{ fontSize: 15 }}>{fmt(totalNetReceived(detail))}</div></div>
               <div className="metric"><div className="metric-label">Balance</div><div className={`metric-value ${remainingBalance(detail) > 0 ? 'amber' : ''}`} style={{ fontSize: 15 }}>{fmt(remainingBalance(detail))}</div></div>
+              <div className="metric">
+                <div className="metric-label">Status</div>
+                <div className="metric-value" style={{ fontSize: 15 }}>
+                  {(() => {
+                    const status = paymentStatus(detail)
+                    return <span className={`badge badge-${status === 'Fully paid' ? 'paid' : status === 'Partial' ? 'partial' : 'unpaid'}`}>{status}</span>
+                  })()}
+                </div>
+              </div>
             </div>
 
             <div className="section-label">Project details</div>
@@ -447,18 +495,16 @@ export default function App() {
                 ['Client / startup', 'startup', 'text'],
                 ['Month', 'month', 'text'],
                 ['New / Repeat', 'newrep', 'select', ['New','Repeat']],
-                ['Channel', 'channel', 'select', ['UW','Direct','Stripe']],
+                ['Channel', 'channel', 'select', ['UW','Repeat','Referral','Website']],
                 ['Delivery type', 'delivery', 'text'],
                 ['Business model', 'bm', 'text'],
-                ['Complexity', 'complexity', 'select', ['Wizard+','Complex','Standard','Simple','']],
                 ['Sold by', 'soldBy', 'text'],
                 ['Contact', 'contact', 'text'],
                 ['Email', 'email', 'text'],
                 ['Country', 'country', 'text'],
                 ['Contract date', 'date', 'text'],
                 ['Booked amount', 'amount', 'number'],
-                ['Billing thru', 'billingThru', 'select', ['Upwork','Stripe','Direct']],
-                ['Invoicing value', 'invoicingValue', 'text'],
+                ['Billing thru', 'billingThru', 'select', ['UW','Stripe','Bank Transfer','Open Link']],
                 ['Upwork name', 'upworkName', 'text'],
               ] as [string, string, string, string[]?][]).map(([label, field, type, opts]) => (
                 <div className="pe-group" key={field}>
@@ -476,8 +522,8 @@ export default function App() {
               ))}
               <div className="pe-group full">
                 <div className="pe-label">Project description</div>
-                <textarea className="pe-input" rows={2} value={detail.desc}
-                  onChange={e => updateField(detail.id, 'desc', e.target.value)} />
+                <textarea className="pe-input" rows={2} value={detail.description}
+                  onChange={e => updateField(detail.id, 'description', e.target.value)} />
               </div>
               <div className="pe-group full">
                 <div className="pe-label">Notes</div>
@@ -513,6 +559,7 @@ export default function App() {
               const inv = detail.invoices[i]
               const hasData = inv && (inv.num || inv.amt > 0)
               if (!hasData && i > 0 && !detail.invoices[i - 1]) return null
+              const net = inv ? invoiceNet(inv) : 0
               return (
                 <div className="inv-card" key={i}>
                   <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--text2)', marginBottom: 8 }}>
@@ -521,7 +568,8 @@ export default function App() {
                   <div className="inv-grid">
                     {([
                       ['Invoice #','num','text'],['Date','date','text'],['Amount','amt','number'],
-                      ['Due date','due','text'],['Date paid','paid','text'],['Net received','net','number'],
+                      ['Due date','due','text'],['Date paid','paid','text'],
+                      ['UW fee','uwFee','number'],['Stripe fee','stripeFee','number'],
                     ] as [string,string,string][]).map(([label, key, type]) => (
                       <div className="inv-cell" key={key}>
                         <div className="inv-key">{label}</div>
@@ -531,10 +579,13 @@ export default function App() {
                           style={{ fontSize: 11 }} />
                       </div>
                     ))}
+                    <div className="inv-cell">
+                      <div className="inv-key">Net received</div>
+                      <div className="pe-input" style={{ fontSize: 11, color: 'var(--green)' }}>{fmt(net)}</div>
+                    </div>
                   </div>
                   {inv && (
                     <div style={{ fontSize: 11, color: 'var(--text2)', marginTop: 6 }}>
-                      Fee: {fmt(Math.max(0, (inv.amt || 0) - (inv.net || 0)))} &nbsp;·&nbsp;
                       Status: <span className={inv.paid ? 'paid-yes' : 'paid-no'}>{inv.paid ? 'Paid ' + inv.paid : 'Unpaid'}</span>
                     </div>
                   )}
