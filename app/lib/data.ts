@@ -219,19 +219,12 @@ export function parseCSVRow(headers: string[], row: string[]): Partial<Project> 
     const indices = allIdx[name.trim().toLowerCase()]
     return indices ? (row[indices[0]] || '').trim() : ''
   }
-  const colN = (name: string, n: number): string => {
-    const indices = allIdx[name.trim().toLowerCase()]
-    const i = indices?.[n] ?? -1
-    return i >= 0 ? (row[i] || '').trim() : ''
-  }
 
   const client = col('startups')
   if (!client) return null
 
   const parseAmt = (s: string) => parseFloat(s.replace(/[$,]/g, '')) || 0
   const parsePct = (s: string) => parseFloat(s.replace('%', '')) || 0
-  const normalizeDate = (s: string) =>
-    s.replace(/^(\d{1,2}\/\d{1,2}\/)(\d{2})$/, (_, prefix, yr) => prefix + (parseInt(yr) > 50 ? '19' : '20') + yr)
 
   const alloc: Allocation = { J: 0, M: 0, N: 0, A: 0, G: 0, S: 0 }
   alloc.J = parsePct(col('j%'))
@@ -242,31 +235,12 @@ export function parseCSVRow(headers: string[], row: string[]): Partial<Project> 
   alloc.S = parsePct(col('s%'))
 
   const newrep = col('new') ? 'New' : col('repeat') ? 'Repeat' : 'New'
-
   const bookedAmt = parseAmt(col('booked amount'))
+  const bookedStatus = col('booked amount status')
+  const net = parseAmt(col('total net payment after fees (for allocations)'))
+  const paid = (bookedStatus === 'Fully paid' || bookedStatus === 'Partial') ? 'imported' : ''
 
-  const invoices: Invoice[] = []
-  const invDefs = [
-    { num: '1st invoice number', date: '1st invoice date', amt: '1st invoice amount', n: 0 },
-    { num: '2nd invoice number', date: '2nd invoice date', amt: '2nd invoice amount', n: 1 },
-    { num: '3rd invoice number', date: '3rd invoice date', amt: '3rd invoice amount', n: 2 },
-  ]
-  for (const def of invDefs) {
-    const num = col(def.num)
-    const date = normalizeDate(col(def.date))
-    let amt = parseAmt(col(def.amt))
-    const due = normalizeDate(colN('due date', def.n))
-    const paid = normalizeDate(colN('payment date', def.n))
-    const net = parseAmt(colN('net received stripe/upwork', def.n))
-    const stripeFee = parseAmt(colN('stripe/upwork fee', def.n))
-    // For the 1st invoice: fall back to Booked Amount if the invoice amount column is empty
-    if (def.n === 0 && amt === 0 && bookedAmt > 0) amt = bookedAmt
-    // Include invoice if it has an amount, number, payment date, or net received
-    if (amt > 0 || num || paid || net > 0) {
-      invoices.push({ num, date, amt, due, paid, net, uwFee: 0, stripeFee })
-    }
-  }
-  if (invoices.length === 0) invoices.push({ num: '', date: '', amt: 0, due: '', paid: '', net: 0, uwFee: 0, stripeFee: 0 })
+  const invoice: Invoice = { num: '', date: '', amt: bookedAmt, due: '', paid, net, uwFee: 0, stripeFee: 0 }
 
   return {
     newrep,
@@ -282,13 +256,13 @@ export function parseCSVRow(headers: string[], row: string[]): Partial<Project> 
     country: col('country'),
     contact: col('contact'),
     email: col('email'),
-    date: normalizeDate(col('contract close date')),
+    date: col('contract close date'),
     amount: bookedAmt,
     billingThru: col('billing thru'),
     invoicingValue: col('invoicing value'),
-    billingDetails: col('booked amount status'),
+    billingDetails: bookedStatus,
     notes: col('notes'),
     readyForBilling: false,
-    invoices,
+    invoices: [invoice],
   }
 }
