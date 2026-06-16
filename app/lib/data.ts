@@ -238,14 +238,15 @@ export function parseCSVRow(headers: string[], row: string[]): Partial<Project> 
   if (!client) return null
 
   const parseAmt = (s: string) => parseFloat(s.replace(/[$,]/g, '')) || 0
+  const parsePct = (s: string) => parseFloat(s.replace('%', '')) || 0
 
   const alloc: Allocation = { J: 0, M: 0, N: 0, A: 0, G: 0, S: 0 }
-  alloc.J = parseFloat(col('j%')) || 0
-  alloc.M = parseFloat(col('m%')) || 0
-  alloc.N = parseFloat(col('n%')) || 0
-  alloc.A = parseFloat(col('a%')) || 0
-  alloc.G = parseFloat(col('g%')) || 0
-  alloc.S = parseFloat(col('s%')) || 0
+  alloc.J = parsePct(col('j%'))
+  alloc.M = parsePct(col('m%'))
+  alloc.N = parsePct(col('n%'))
+  alloc.A = parsePct(col('a%'))
+  alloc.G = parsePct(col('g%'))
+  alloc.S = parsePct(col('s%'))
 
   const newrep = col('new') ? 'New' : col('repeat') ? 'Repeat' : 'New'
 

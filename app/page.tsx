@@ -112,19 +112,48 @@ export default function App() {
     }
   }
 
+  function parseCSV(text: string): string[][] {
+    const rows: string[][] = []
+    let cur = ''
+    let inQuotes = false
+    let fields: string[] = []
+
+    for (let i = 0; i < text.length; i++) {
+      const ch = text[i]
+      const next = text[i + 1]
+      if (ch === '"') {
+        if (inQuotes && next === '"') { cur += '"'; i++ }
+        else inQuotes = !inQuotes
+      } else if (ch === ',' && !inQuotes) {
+        fields.push(cur.trim())
+        cur = ''
+      } else if ((ch === '\n' || ch === '\r') && !inQuotes) {
+        if (ch === '\r' && next === '\n') i++
+        fields.push(cur.trim())
+        cur = ''
+        if (fields.some(f => f !== '')) rows.push(fields)
+        fields = []
+      } else {
+        cur += ch
+      }
+    }
+    if (fields.length || cur) { fields.push(cur.trim()); if (fields.some(f => f !== '')) rows.push(fields) }
+    return rows
+  }
+
   function handleCSV(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file) return
     const reader = new FileReader()
     reader.onload = async (ev) => {
       const text = ev.target?.result as string
-      const lines = text.split('\n').filter(l => l.trim())
-      if (lines.length < 2) { setImportMsg('File appears empty.'); return }
-      const headers = parseCSVLine(lines[0])
+      const rows = parseCSV(text)
+      if (rows.length < 2) { setImportMsg('File appears empty.'); return }
+      const headers = rows[0]
       let skipped = 0
       const drafts: Project[] = []
-      for (let i = 1; i < lines.length; i++) {
-        const row = parseCSVLine(lines[i])
+      for (let i = 1; i < rows.length; i++) {
+        const row = rows[i]
         const partial = parseCSVRow(headers, row)
         if (!partial || !partial.startup) { skipped++; continue }
         drafts.push({ ...emptyProject(0), ...partial } as Project)
@@ -138,19 +167,6 @@ export default function App() {
       }
     }
     reader.readAsText(file)
-  }
-
-  function parseCSVLine(line: string): string[] {
-    const result: string[] = []
-    let cur = '', inQ = false
-    for (let i = 0; i < line.length; i++) {
-      const c = line[i]
-      if (c === '"') { inQ = !inQ }
-      else if (c === ',' && !inQ) { result.push(cur); cur = '' }
-      else cur += c
-    }
-    result.push(cur)
-    return result
   }
 
   // Filtering
