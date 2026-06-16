@@ -204,56 +204,52 @@ export const ALLOC_COLORS: Record<string, string> = {
 
 // CSV import — maps column headers from the Google Sheet to Project fields
 export function parseCSVRow(headers: string[], row: string[]): Partial<Project> | null {
-  const get = (name: string) => {
-    const i = headers.findIndex(h => h.trim().toLowerCase().includes(name.toLowerCase()))
+  const allIdx: Record<string, number[]> = {}
+  headers.forEach((h, i) => {
+    const key = h.trim().toLowerCase()
+    if (!allIdx[key]) allIdx[key] = []
+    allIdx[key].push(i)
+  })
+
+  const col = (name: string): string => {
+    const indices = allIdx[name.trim().toLowerCase()]
+    return indices ? (row[indices[0]] || '').trim() : ''
+  }
+  const colN = (name: string, n: number): string => {
+    const indices = allIdx[name.trim().toLowerCase()]
+    const i = indices?.[n] ?? -1
     return i >= 0 ? (row[i] || '').trim() : ''
   }
-  // Finds the value of the Nth (0-indexed) header containing `name` — used for
-  // columns like "Due date" / "Payment date" that repeat once per invoice.
-  const getNth = (name: string, n: number) => {
-    let count = 0
-    for (let idx = 0; idx < headers.length; idx++) {
-      if (headers[idx].trim().toLowerCase().includes(name.toLowerCase())) {
-        if (count === n) return (row[idx] || '').trim()
-        count++
-      }
-    }
-    return ''
-  }
-  const client = get('startup') || get('client')
+
+  const client = col('startups')
   if (!client) return null
 
   const parseAmt = (s: string) => parseFloat(s.replace(/[$,]/g, '')) || 0
 
-  // "Booked Amount" vs "Booked Amount status" — prefer an exact header match so the
-  // status column (which also contains "booked amount") doesn't shadow this lookup.
-  const bookedAmountIdx = headers.findIndex(h => h.trim().toLowerCase() === 'booked amount')
-  const bookedAmount = bookedAmountIdx >= 0 ? (row[bookedAmountIdx] || '') : get('booked amount')
+  const alloc: Allocation = { J: 0, M: 0, N: 0, A: 0, G: 0, S: 0 }
+  alloc.J = parseFloat(col('j%')) || 0
+  alloc.M = parseFloat(col('m%')) || 0
+  alloc.N = parseFloat(col('n%')) || 0
+  alloc.A = parseFloat(col('a%')) || 0
+  alloc.G = parseFloat(col('g%')) || 0
+  alloc.S = parseFloat(col('s%')) || 0
 
-  const allocKeys = ['J%','M%','N%','A%','G%','S%']
-  const alloc: Allocation = { J:0, M:0, N:0, A:0, G:0, S:0 }
-  const allocMap: Record<string, keyof Allocation> = {'j%':'J','m%':'M','n%':'N','a%':'A','g%':'G','s%':'S'}
-  allocKeys.forEach(k => {
-    const idx = headers.findIndex(h => h.trim().toLowerCase() === k.toLowerCase())
-    if (idx >= 0) {
-      const key = allocMap[k.toLowerCase()]
-      alloc[key] = parseFloat(row[idx]) || 0
-    }
-  })
+  const newrep = col('new') ? 'New' : col('repeat') ? 'Repeat' : 'New'
 
-  // Parse invoices. "Due date", "Payment date", "Net received", "Stripe/Upwork fee"
-  // each repeat once per invoice — resolved by Nth occurrence via getNth.
   const invoices: Invoice[] = []
-  const invPrefixes = ['1st', '2nd', '3rd'] as const
-  for (let i = 0; i < 3; i++) {
-    const pfx = invPrefixes[i]
-    const num = get(`${pfx} invoice number`)
-    const date = get(`${pfx} invoice date`)
-    const amt = parseAmt(get(`${pfx} invoice amount`))
-    const due = getNth('due date', i)
-    const paid = getNth('payment date', i)
-    const net = parseAmt(getNth('net received', i))
-    const stripeFee = parseAmt(getNth('stripe/upwork fee', i))
+  const invDefs = [
+    { num: '1st invoice number', date: '1st invoice date', amt: '1st invoice amount', n: 0 },
+    { num: '2nd invoice number', date: '2nd invoice date', amt: '2nd invoice amount', n: 1 },
+    { num: '3rd invoice number', date: '3rd invoice date', amt: '3rd invoice amount', n: 2 },
+  ]
+  for (const def of invDefs) {
+    const num = col(def.num)
+    const date = col(def.date)
+    const amt = parseAmt(col(def.amt))
+    const due = colN('due date', def.n)
+    const paid = colN('payment date', def.n)
+    const net = parseAmt(colN('net received stripe/upwork', def.n))
+    const stripeFee = parseAmt(colN('stripe/upwork fee', def.n))
     if (amt > 0 || num) {
       invoices.push({ num, date, amt, due, paid, net, uwFee: 0, stripeFee })
     }
@@ -261,25 +257,25 @@ export function parseCSVRow(headers: string[], row: string[]): Partial<Project> 
   if (invoices.length === 0) invoices.push({ num: '', date: '', amt: 0, due: '', paid: '', net: 0, uwFee: 0, stripeFee: 0 })
 
   return {
-    newrep: get('new') || get('repeat') || 'New',
-    month: get('month'),
-    channel: get('channel'),
-    delivery: get('delivery'),
+    newrep,
+    month: col('month'),
+    channel: col('channel'),
+    delivery: col('delivery'),
     startup: client,
-    modelDesc: get('model description'),
-    soldBy: get('sold by'),
+    modelDesc: col('model description'),
+    soldBy: col('sold by'),
     alloc,
-    description: get('project description'),
-    upworkName: get('upwork name'),
-    country: get('country'),
-    contact: get('contact'),
-    email: get('email'),
-    date: get('contract close date'),
-    amount: parseAmt(bookedAmount),
-    billingThru: get('billing thru') || get('billing through'),
-    invoicingValue: get('invoicing value'),
-    billingDetails: get('booked amount status'),
-    notes: get('notes'),
+    description: col('project description'),
+    upworkName: col('upwork name'),
+    country: col('country'),
+    contact: col('contact'),
+    email: col('email'),
+    date: col('contract close date'),
+    amount: parseAmt(col('booked amount')),
+    billingThru: col('billing thru'),
+    invoicingValue: col('invoicing value'),
+    billingDetails: col('booked amount status'),
+    notes: col('notes'),
     readyForBilling: false,
     invoices,
   }
