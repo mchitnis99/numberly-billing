@@ -241,25 +241,21 @@ export function parseCSVRow(headers: string[], row: string[]): Partial<Project> 
     }
   })
 
-  // Parse invoices — "Due date", "Payment date", "Net received Stripe/Upwork" and
-  // "Stripe/Upwork fee" each appear once per invoice, so look them up by occurrence index.
+  // Parse invoices. "Due date", "Payment date", "Net received", "Stripe/Upwork fee"
+  // each repeat once per invoice — resolved by Nth occurrence via getNth.
   const invoices: Invoice[] = []
-  // DEBUG: log headers containing "payment" or "date" to verify column names in the CSV
-  console.log('[CSV debug] headers with "payment":', headers.filter(h => h.toLowerCase().includes('payment')).map(h => JSON.stringify(h)))
-  console.log('[CSV debug] headers with "date":', headers.filter(h => h.toLowerCase().includes('date')).map(h => JSON.stringify(h)))
-  for (let i = 1; i <= 3; i++) {
-    const ord = i === 1 ? 'st' : i === 2 ? 'nd' : 'rd'
-    const num = get(`${i}${ord} invoice number`) || get(`invoice number ${i}`)
-    const date = get(`${i}${ord} invoice date`) || get(`invoice date ${i}`)
-    const amt = parseAmt(get(`${i}${ord} invoice amount`) || get(`invoice amount ${i}`))
-    const due = getNth('due date', i - 1)
-    const paid = getNth('payment date', i - 1)
-    const net = parseAmt(getNth('net received', i - 1))
-    const stripeFee = parseAmt(getNth('stripe/upwork fee', i - 1))
-    // DEBUG: show raw values for each invoice slot
-    console.log(`[CSV debug] client="${client}" inv${i}: amt=${amt} paid="${paid}" net=${net} fee=${stripeFee}`)
+  const invPrefixes = ['1st', '2nd', '3rd'] as const
+  for (let i = 0; i < 3; i++) {
+    const pfx = invPrefixes[i]
+    const num = get(`${pfx} invoice number`)
+    const date = get(`${pfx} invoice date`)
+    const amt = parseAmt(get(`${pfx} invoice amount`))
+    const due = getNth('due date', i)
+    const paid = getNth('payment date', i)
+    const net = parseAmt(getNth('net received', i))
+    const stripeFee = parseAmt(getNth('stripe/upwork fee', i))
     if (amt > 0 || num) {
-      invoices.push({ num: num || '', date: date || '', amt, due, paid, net, uwFee: 0, stripeFee })
+      invoices.push({ num, date, amt, due, paid, net, uwFee: 0, stripeFee })
     }
   }
   if (invoices.length === 0) invoices.push({ num: '', date: '', amt: 0, due: '', paid: '', net: 0, uwFee: 0, stripeFee: 0 })
