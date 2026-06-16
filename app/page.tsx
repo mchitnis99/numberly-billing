@@ -418,7 +418,7 @@ export default function App() {
         <div className="table-wrap">
           <table>
             <colgroup>
-              <col style={{ width: 36 }} />
+              <col style={{ width: 48 }} />
               <col style={{ width: 80 }} />
               <col style={{ width: 70 }} />
               <col style={{ width: 150 }} />
@@ -433,7 +433,7 @@ export default function App() {
             </colgroup>
             <thead>
               <tr>
-                <th onClick={() => toggleSort('readyForBilling')} className={sortKey==='readyForBilling'?'sorted':''}>Bill<span className="sort-arrow">{sortKey==='readyForBilling'?(sortDir==='asc'?'↑':'↓'):'↕'}</span></th>
+                <th onClick={() => toggleSort('readyForBilling')} className={sortKey==='readyForBilling'?'sorted':''} title="Ready to bill">Bill?<span className="sort-arrow">{sortKey==='readyForBilling'?(sortDir==='asc'?'↑':'↓'):'↕'}</span></th>
                 <th onClick={() => toggleSort('month')} className={sortKey==='month'?'sorted':''}>Month<span className="sort-arrow">{sortKey==='month'?(sortDir==='asc'?'↑':'↓'):'↕'}</span></th>
                 <th>Delivery</th>
                 <th onClick={() => toggleSort('client')} className={sortKey==='client'?'sorted':''}>Client<span className="sort-arrow">{sortKey==='client'?(sortDir==='asc'?'↑':'↓'):'↕'}</span></th>
@@ -622,11 +622,15 @@ export default function App() {
                       <div className="pe-input" style={{ fontSize: 11, color: 'var(--green)' }}>{fmt(net)}</div>
                     </div>
                   </div>
-                  {inv && (
-                    <div style={{ fontSize: 11, color: 'var(--text2)', marginTop: 6 }}>
-                      Status: <span className={inv.paid ? 'paid-yes' : 'paid-no'}>{inv.paid ? 'Paid ' + inv.paid : 'Unpaid'}</span>
-                    </div>
-                  )}
+                  {inv && (() => {
+                    const isPaid = !!(inv.paid) || invoiceNet(inv) > 0
+                    const paidLabel = inv.paid && inv.paid !== 'imported' ? `Paid ${inv.paid}` : 'Paid'
+                    return (
+                      <div style={{ fontSize: 11, color: 'var(--text2)', marginTop: 6 }}>
+                        Status: <span className={isPaid ? 'paid-yes' : 'paid-no'}>{isPaid ? paidLabel : 'Unpaid'}</span>
+                      </div>
+                    )
+                  })()}
                 </div>
               )
             })}

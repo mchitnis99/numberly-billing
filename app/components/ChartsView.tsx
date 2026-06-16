@@ -54,14 +54,14 @@ export function ChartsView({ projects }: { projects: Project[] }) {
   }))
 
   // 2026 billings by delivery type — stacked bar per month
-  const projects2026 = projects.filter(p => p.month?.endsWith('2026'))
-  const deliveries = [...new Set(projects2026.map(p => p.delivery))].filter(Boolean).sort()
+  const projects2026 = projects.filter(p => p.month?.trim().includes('2026'))
+  const deliveries = [...new Set(projects2026.map(p => p.delivery?.trim()))].filter(Boolean).sort()
   const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
   const deliveryData = MONTHS.map(m => {
     const month = m + ' 2026'
     const row: Record<string, string | number> = { month: m }
     deliveries.forEach(d => {
-      row[d] = projects.filter(p => p.month === month && p.delivery === d).reduce((s, p) => s + p.amount, 0)
+      row[d] = projects.filter(p => p.month?.trim() === month && p.delivery?.trim() === d).reduce((s, p) => s + p.amount, 0)
     })
     return row
   })
@@ -76,22 +76,20 @@ export function ChartsView({ projects }: { projects: Project[] }) {
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
             <XAxis dataKey="month" angle={-45} textAnchor="end" tick={{ fontSize: 10, fill: 'var(--text2)' }} interval={0} />
             <YAxis tickFormatter={tickFmt} tick={{ fontSize: 10, fill: 'var(--text2)' }} axisLine={false} tickLine={false} />
-            <Tooltip formatter={(v) => [fmt(v as number), 'Booked']} contentStyle={tooltipStyle} />
+            <Tooltip formatter={(v) => [fmt(v as number), 'Booked']} contentStyle={{ backgroundColor: '#1a2744', border: '1px solid #334', borderRadius: 6, fontSize: 12 }} />
             <Bar dataKey="amount" fill="#1D9E75" name="Booked" radius={[3, 3, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>
 
       <div>
-        <div style={sectionLabel}>Annual Billings — 2025 vs 2026</div>
+        <div style={sectionLabel}>Annual Collected — 2025 vs 2026</div>
         <ResponsiveContainer width="100%" height={240}>
           <BarChart data={annualData} margin={{ top: 4, right: 16, bottom: 8, left: 56 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
             <XAxis dataKey="year" tick={{ fontSize: 11, fill: 'var(--text2)' }} axisLine={false} tickLine={false} />
             <YAxis tickFormatter={tickFmt} tick={{ fontSize: 10, fill: 'var(--text2)' }} axisLine={false} tickLine={false} />
-            <Tooltip formatter={(v) => fmt(v as number)} contentStyle={tooltipStyle} />
-            <Legend wrapperStyle={{ fontSize: 11 }} />
-            <Bar dataKey="Booked" fill="#534AB7" radius={[3, 3, 0, 0]} />
+            <Tooltip formatter={(v) => [fmt(v as number), 'Collected']} contentStyle={tooltipStyle} />
             <Bar dataKey="Collected" fill="#1D9E75" radius={[3, 3, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>

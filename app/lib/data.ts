@@ -174,7 +174,7 @@ export async function deleteProject(id: number): Promise<void> {
 }
 
 function invIsPaid(inv: Invoice): boolean {
-  return !!(inv.paid) || (inv.net || 0) > 0
+  return !!(inv.paid) || invoiceNet(inv) > 0
 }
 
 export function paymentStatus(p: Project): 'Fully paid' | 'Partial' | 'Unpaid' | 'Bad Debt' {
@@ -243,9 +243,11 @@ export function parseCSVRow(headers: string[], row: string[]): Partial<Project> 
   const bookedAmt = parseAmt(col('booked amount'))
   const bookedStatus = col('booked amount status')
   const net = parseAmt(col('total net payment after fees (for allocations)'))
-  const paid = (bookedStatus === 'Fully paid' || bookedStatus === 'Partial') ? 'imported' : ''
-
-  const invoice: Invoice = { num: '', date: '', amt: bookedAmt, due: '', paid, net, uwFee: 0, stripeFee: 0 }
+  const isCsvPaid = (bookedStatus === 'Fully paid' || bookedStatus === 'Partial')
+  const paid = isCsvPaid ? 'imported' : ''
+  // Only set invoice amt for paid/partial rows — unpaid rows get amt=0 so that
+  // invIsPaid (which uses invoiceNet > 0) doesn't falsely mark them as paid.
+  const invoice: Invoice = { num: '', date: '', amt: isCsvPaid ? bookedAmt : 0, due: '', paid, net: isCsvPaid ? net : 0, uwFee: 0, stripeFee: 0 }
 
   return {
     newrep,
