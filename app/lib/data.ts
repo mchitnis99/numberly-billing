@@ -169,8 +169,12 @@ export async function deleteProject(id: number): Promise<void> {
   if (error) throw error
 }
 
+function invIsPaid(inv: Invoice): boolean {
+  return !!(inv.paid) || (inv.net || 0) > 0
+}
+
 export function paymentStatus(p: Project): 'Fully paid' | 'Partial' | 'Unpaid' {
-  const paid = p.invoices.reduce((s, inv) => s + (inv.paid ? inv.amt : 0), 0)
+  const paid = p.invoices.reduce((s, inv) => s + (invIsPaid(inv) ? inv.amt : 0), 0)
   if (p.amount > 0 && paid >= p.amount) return 'Fully paid'
   if (paid > 0) return 'Partial'
   return 'Unpaid'
@@ -181,11 +185,11 @@ export function invoiceNet(inv: Invoice): number {
 }
 
 export function totalNetReceived(p: Project): number {
-  return p.invoices.reduce((s, inv) => s + (inv.paid ? invoiceNet(inv) : 0), 0)
+  return p.invoices.reduce((s, inv) => s + (invIsPaid(inv) ? invoiceNet(inv) : 0), 0)
 }
 
 export function remainingBalance(p: Project): number {
-  const paid = p.invoices.reduce((s, inv) => s + (inv.paid ? inv.amt : 0), 0)
+  const paid = p.invoices.reduce((s, inv) => s + (invIsPaid(inv) ? inv.amt : 0), 0)
   return Math.max(0, p.amount - paid)
 }
 
