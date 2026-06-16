@@ -15,10 +15,10 @@ const emptyAlloc = (): Allocation => ({ J: 0, M: 0, N: 0, A: 0, G: 0, S: 0 })
 
 function emptyProject(id: number): Project {
   return {
-    id, newrep: 'New', month: '', channel: 'UW', delivery: 'FM', startup: '', bm: '',
+    id, newrep: 'New', month: '', channel: 'UW', delivery: 'FM', startup: '',
     modelDesc: '', soldBy: 'M', alloc: emptyAlloc(), description: '', upworkName: '', country: 'US',
     contact: '', email: '', date: '', amount: 0, billingThru: 'UW', invoicingValue: '',
-    bookedAmountStatus: 'Active',
+    billingDetails: '',
     readyForBilling: false, notes: '', invoices: [emptyInv()]
   }
 }
@@ -254,19 +254,19 @@ export default function App() {
       <style>{`
         *, *::before, *::after { box-sizing: border-box; }
         body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); font-size: 13px; }
-        .nav { background: var(--surface); border-bottom: 0.5px solid var(--border); position: sticky; top: 0; z-index: 20; }
+        .nav { background: #1a2744; border-bottom: none; position: sticky; top: 0; z-index: 20; }
         .nav-inner { max-width: 1400px; margin: 0 auto; padding: 0 1.25rem; display: flex; align-items: center; gap: 1.5rem; height: 48px; }
-        .nav-brand { font-size: 14px; font-weight: 600; color: var(--text); }
+        .nav-brand { font-size: 14px; font-weight: 700; color: #1D9E75; letter-spacing: -0.01em; }
         .nav-views { display: flex; gap: 2px; }
-        .nav-view { padding: 4px 12px; border-radius: var(--radius); font-size: 12px; border: none; background: transparent; color: var(--text2); cursor: pointer; font-family: inherit; transition: all 0.1s; }
-        .nav-view:hover { background: var(--surface2); color: var(--text); }
-        .nav-view.active { background: var(--surface2); color: var(--text); font-weight: 500; }
+        .nav-view { padding: 4px 12px; border-radius: var(--radius); font-size: 12px; border: none; background: transparent; color: rgba(255,255,255,0.55); cursor: pointer; font-family: inherit; transition: all 0.15s; }
+        .nav-view:hover { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.9); }
+        .nav-view.active { background: rgba(29,158,117,0.2); color: #fff; font-weight: 500; box-shadow: inset 0 -2px 0 #1D9E75; }
         .nav-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
         .wrap { max-width: 1400px; margin: 0 auto; padding: 0 1.25rem 3rem; }
         .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px,1fr)); gap: 8px; margin: 1rem 0; }
-        .metric { background: var(--surface2); border-radius: var(--radius); padding: 0.75rem 1rem; }
+        .metric { background: var(--surface2); border-radius: var(--radius); padding: 0.75rem 1rem; border: 0.5px solid var(--border); }
         .metric-label { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 3px; }
-        .metric-value { font-size: 18px; font-weight: 500; color: var(--text); }
+        .metric-value { font-size: 18px; font-weight: 600; color: var(--text); }
         .metric-value.green { color: var(--green); }
         .metric-value.amber { color: var(--amber); }
         .metric-value.red { color: var(--red); }
@@ -275,8 +275,8 @@ export default function App() {
         .toolbar input[type="text"] { padding: 5px 10px; border: 0.5px solid var(--border2); border-radius: var(--radius); background: var(--surface); color: var(--text); font-size: 12px; font-family: inherit; width: 200px; }
         .btn { padding: 5px 11px; font-size: 12px; border: 0.5px solid var(--border2); border-radius: var(--radius); background: var(--surface); color: var(--text); cursor: pointer; font-family: inherit; transition: all 0.1s; white-space: nowrap; }
         .btn:hover { background: var(--surface2); }
-        .btn-primary { background: var(--text); color: var(--bg); border-color: var(--text); font-weight: 500; }
-        .btn-primary:hover { opacity: 0.85; }
+        .btn-primary { background: #1D9E75; color: #fff; border-color: #1D9E75; font-weight: 500; }
+        .btn-primary:hover { background: #178a64; border-color: #178a64; }
         .btn-danger { color: var(--red); }
         .btn-danger:hover { background: var(--red-bg); }
         .btn-ready { background: var(--amber-bg); color: var(--amber-text); border-color: transparent; }
@@ -286,15 +286,18 @@ export default function App() {
         .table-wrap::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 6px; }
         .table-wrap::-webkit-scrollbar-thumb:hover { background: var(--text3); }
         .scroll-hint { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--text3); margin-bottom: 4px; }
-        table { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 1700px; table-layout: fixed; }
+        table { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 1250px; table-layout: fixed; }
         thead { position: sticky; top: 0; z-index: 5; }
-        th { background: var(--surface2); font-weight: 500; color: var(--text2); padding: 7px 10px; text-align: left; border-bottom: 0.5px solid var(--border); font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; white-space: nowrap; cursor: pointer; user-select: none; overflow: hidden; text-overflow: ellipsis; }
-        th:hover { color: var(--text); }
-        th.sorted { color: var(--text); }
+        th { background: #f0eff8; font-weight: 600; color: #4a4870; padding: 7px 10px; text-align: left; border-bottom: 1px solid rgba(83,74,183,0.15); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap; cursor: pointer; user-select: none; overflow: hidden; text-overflow: ellipsis; }
+        @media (prefers-color-scheme: dark) { th { background: #1e1e2e; color: #a0a0c0; border-bottom-color: rgba(160,160,192,0.15); } }
+        th:hover { color: #534AB7; }
+        th.sorted { color: #534AB7; }
         td { padding: 6px 10px; border-bottom: 0.5px solid var(--border); color: var(--text); vertical-align: middle; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         tr:last-child td { border-bottom: none; }
         tr:hover td { background: var(--surface2); }
         tr.ready-row td { background: rgba(186,117,23,0.04); }
+        tr.ready-row td:first-child { border-left: 3px solid var(--amber); }
+        tr.paid-row td:first-child { border-left: 3px solid var(--green); }
         .cell-value { cursor: pointer; display: inline-block; min-width: 20px; padding: 1px 3px; border-radius: 3px; transition: background 0.1s; }
         .cell-value:hover { background: var(--border); }
         .cell-input { padding: 2px 6px; border: 1px solid var(--text); border-radius: 4px; background: var(--surface); color: var(--text); font-size: 12px; font-family: inherit; outline: none; }
@@ -333,7 +336,7 @@ export default function App() {
         .pe-group.full { grid-column: 1 / -1; }
         .pe-label { font-size: 10px; color: var(--text2); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 500; }
         .pe-input { padding: 6px 8px; border: 0.5px solid var(--border2); border-radius: var(--radius); background: var(--surface); color: var(--text); font-size: 12px; font-family: inherit; }
-        .pe-input:focus { outline: none; border-color: var(--text); }
+        .pe-input:focus { outline: none; border-color: #1D9E75; }
         .import-panel { background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 1.25rem; margin-bottom: 1rem; }
         .import-steps { font-size: 12px; color: var(--text2); line-height: 1.8; margin-bottom: 1rem; }
         .empty { text-align: center; padding: 3rem; color: var(--text3); font-size: 12px; }
@@ -392,60 +395,47 @@ export default function App() {
           <table>
             <colgroup>
               <col style={{ width: 36 }} />
-              <col style={{ width: 64 }} />
-              <col style={{ width: 64 }} />
-              <col style={{ width: 76 }} />
-              <col style={{ width: 64 }} />
-              <col style={{ width: 130 }} />
-              <col style={{ width: 110 }} />
-              <col style={{ width: 56 }} />
-              <col style={{ width: 110 }} />
-              <col style={{ width: 64 }} />
-              <col style={{ width: 86 }} />
               <col style={{ width: 80 }} />
+              <col style={{ width: 70 }} />
+              <col style={{ width: 150 }} />
+              <col style={{ width: 60 }} />
+              <col style={{ width: 130 }} />
+              <col style={{ width: 90 }} />
+              <col style={{ width: 200 }} />
               <col style={{ width: 90 }} />
               <col style={{ width: 100 }} />
-              <col style={{ width: 110 }} />
-              <col style={{ width: 86 }} />
-              <col style={{ width: 80 }} />
-              <col style={{ width: 80 }} />
-              <col style={{ width: 160 }} />
+              <col style={{ width: 90 }} />
+              <col style={{ width: 90 }} />
               <col style={{ width: 64 }} />
             </colgroup>
             <thead>
               <tr>
                 <th onClick={() => toggleSort('readyForBilling')} className={sortKey==='readyForBilling'?'sorted':''}>Bill<span className="sort-arrow">{sortKey==='readyForBilling'?(sortDir==='asc'?'↑':'↓'):'↕'}</span></th>
                 <th onClick={() => toggleSort('month')} className={sortKey==='month'?'sorted':''}>Month<span className="sort-arrow">{sortKey==='month'?(sortDir==='asc'?'↑':'↓'):'↕'}</span></th>
-                <th>New/Rep</th>
-                <th>Channel</th>
                 <th>Delivery</th>
                 <th onClick={() => toggleSort('client')} className={sortKey==='client'?'sorted':''}>Client<span className="sort-arrow">{sortKey==='client'?(sortDir==='asc'?'↑':'↓'):'↕'}</span></th>
-                <th>Business model</th>
                 <th>Sold by</th>
                 <th>Contact</th>
-                <th>Country</th>
-                <th onClick={() => toggleSort('date')} className={sortKey==='date'?'sorted':''}>Contract date<span className="sort-arrow">{sortKey==='date'?(sortDir==='asc'?'↑':'↓'):'↕'}</span></th>
                 <th onClick={() => toggleSort('amount')} className={sortKey==='amount'?'sorted':''}>Booked<span className="sort-arrow">{sortKey==='amount'?(sortDir==='asc'?'↑':'↓'):'↕'}</span></th>
-                <th>Bkd status</th>
+                <th>Billing details</th>
                 <th>Billing thru</th>
-                <th>Allocation</th>
                 <th onClick={() => toggleSort('status')} className={sortKey==='status'?'sorted':''}>Status<span className="sort-arrow">{sortKey==='status'?(sortDir==='asc'?'↑':'↓'):'↕'}</span></th>
                 <th>Net recv.</th>
                 <th onClick={() => toggleSort('balance')} className={sortKey==='balance'?'sorted':''}>Balance<span className="sort-arrow">{sortKey==='balance'?(sortDir==='asc'?'↑':'↓'):'↕'}</span></th>
-                <th>Notes</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
               {sorted.length === 0 && (
-                <tr><td colSpan={20}><div className="empty">{loading ? 'Loading projects…' : 'No projects found'}</div></td></tr>
+                <tr><td colSpan={13}><div className="empty">{loading ? 'Loading projects…' : 'No projects found'}</div></td></tr>
               )}
               {sorted.map(p => {
                 const status = paymentStatus(p)
                 const bal = remainingBalance(p)
                 const net = totalNetReceived(p)
+                const rowClass = p.readyForBilling ? 'ready-row' : status === 'Fully paid' ? 'paid-row' : ''
                 return (
-                  <tr key={p.id} className={p.readyForBilling ? 'ready-row' : ''}>
+                  <tr key={p.id} className={rowClass}>
                     <td style={{ textAlign: 'center' }}>
                       <input type="checkbox" checked={p.readyForBilling}
                         onChange={e => updateField(p.id, 'readyForBilling', e.target.checked)}
@@ -453,26 +443,19 @@ export default function App() {
                         title="Mark as ready to bill" />
                     </td>
                     <td><InlineEdit id={p.id} field="month" value={p.month} /></td>
-                    <td><InlineEdit id={p.id} field="newrep" value={p.newrep} options={['New','Repeat']} /></td>
-                    <td><InlineEdit id={p.id} field="channel" value={p.channel} options={['UW','Repeat','Referral','Website']} /></td>
                     <td><InlineEdit id={p.id} field="delivery" value={p.delivery} /></td>
-                    <td style={{ fontWeight: 500, minWidth: 120 }}><InlineEdit id={p.id} field="startup" value={p.startup} /></td>
-                    <td><InlineEdit id={p.id} field="bm" value={p.bm} /></td>
+                    <td style={{ fontWeight: 500 }}><InlineEdit id={p.id} field="startup" value={p.startup} /></td>
                     <td><InlineEdit id={p.id} field="soldBy" value={p.soldBy} /></td>
                     <td><InlineEdit id={p.id} field="contact" value={p.contact} /></td>
-                    <td><InlineEdit id={p.id} field="country" value={p.country} /></td>
-                    <td><InlineEdit id={p.id} field="date" value={p.date} /></td>
                     <td className="amt"><InlineEdit id={p.id} field="amount" value={p.amount} type="number" /></td>
-                    <td><InlineEdit id={p.id} field="bookedAmountStatus" value={p.bookedAmountStatus} options={['Fully paid','Partial','Active','On hold']} /></td>
+                    <td><InlineEdit id={p.id} field="billingDetails" value={p.billingDetails} /></td>
                     <td><InlineEdit id={p.id} field="billingThru" value={p.billingThru} options={['UW','Stripe','Bank Transfer','Open Link']} /></td>
-                    <td style={{ minWidth: 100 }}><AllocBar alloc={p.alloc} /></td>
                     <td>
                       <span className={`badge badge-${status === 'Fully paid' ? 'paid' : status === 'Partial' ? 'partial' : 'unpaid'}`}>{status}</span>
                       {p.readyForBilling && <span className="badge badge-ready" style={{ marginLeft: 4 }}>Ready</span>}
                     </td>
                     <td className="amt" style={{ color: 'var(--green)' }}>{fmt(net)}</td>
                     <td className="amt" style={{ color: bal > 0 ? 'var(--amber)' : 'var(--text3)', fontWeight: bal > 0 ? 500 : 400 }}>{fmt(bal)}</td>
-                    <td style={{ maxWidth: 160 }}><InlineEdit id={p.id} field="notes" value={p.notes} /></td>
                     <td><button className="btn" style={{ fontSize: 11, padding: '3px 8px' }} onClick={() => openDetail(p.id)}>Detail</button></td>
                   </tr>
                 )
@@ -522,14 +505,12 @@ export default function App() {
                 ['New / Repeat', 'newrep', 'select', ['New','Repeat']],
                 ['Channel', 'channel', 'select', ['UW','Repeat','Referral','Website']],
                 ['Delivery type', 'delivery', 'text'],
-                ['Business model', 'bm', 'text'],
                 ['Sold by', 'soldBy', 'text'],
                 ['Contact', 'contact', 'text'],
                 ['Email', 'email', 'text'],
                 ['Country', 'country', 'text'],
                 ['Contract date', 'date', 'text'],
                 ['Booked amount', 'amount', 'number'],
-                ['Booked amount status', 'bookedAmountStatus', 'select', ['Fully paid','Partial','Active','On hold']],
                 ['Billing thru', 'billingThru', 'select', ['UW','Stripe','Bank Transfer','Open Link']],
                 ['Upwork name', 'upworkName', 'text'],
               ] as [string, string, string, string[]?][]).map(([label, field, type, opts]) => (
@@ -547,14 +528,15 @@ export default function App() {
                 </div>
               ))}
               <div className="pe-group full">
+                <div className="pe-label">Billing details</div>
+                <textarea className="pe-input" rows={2} value={detail.billingDetails}
+                  onChange={e => updateField(detail.id, 'billingDetails', e.target.value)}
+                  placeholder="e.g. Bill $500 now, hold rest" />
+              </div>
+              <div className="pe-group full">
                 <div className="pe-label">Project description</div>
                 <textarea className="pe-input" rows={2} value={detail.description}
                   onChange={e => updateField(detail.id, 'description', e.target.value)} />
-              </div>
-              <div className="pe-group full">
-                <div className="pe-label">Notes</div>
-                <textarea className="pe-input" rows={2} value={detail.notes}
-                  onChange={e => updateField(detail.id, 'notes', e.target.value)} />
               </div>
               <div className="pe-group full" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <input type="checkbox" checked={detail.readyForBilling}
