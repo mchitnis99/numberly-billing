@@ -6,9 +6,10 @@ import {
   fetchProjects, insertProject, insertProjects, upsertProject, deleteProject as deleteProjectRow,
 } from './lib/data'
 import { AllocBar } from './components/AllocBar'
+import { ChartsView } from './components/ChartsView'
 
 type SortKey = 'month' | 'client' | 'amount' | 'balance' | 'status' | 'date' | 'readyForBilling'
-type View = 'all' | 'outstanding' | 'ready' | 'paid'
+type View = 'all' | 'outstanding' | 'ready' | 'paid' | 'bad-debt' | 'charts'
 
 const emptyInv = (): Invoice => ({ num: '', date: '', amt: 0, due: '', paid: '', net: 0, uwFee: 0, stripeFee: 0 })
 const emptyAlloc = (): Allocation => ({ J: 0, M: 0, N: 0, A: 0, G: 0, S: 0 })
@@ -19,7 +20,7 @@ function emptyProject(id: number): Project {
     modelDesc: '', soldBy: 'M', alloc: emptyAlloc(), description: '', upworkName: '', country: 'US',
     contact: '', email: '', date: '', amount: 0, billingThru: 'UW', invoicingValue: '',
     billingDetails: '',
-    readyForBilling: false, notes: '', invoices: [emptyInv()]
+    readyForBilling: false, badDebt: false, notes: '', invoices: [emptyInv()]
   }
 }
 
@@ -175,16 +176,17 @@ export default function App() {
     const matchSearch = !s || p.startup.toLowerCase().includes(s) || p.contact.toLowerCase().includes(s) || p.month.toLowerCase().includes(s) || p.channel.toLowerCase().includes(s)
     const status = paymentStatus(p)
     const matchView = view === 'all' ? true :
-      view === 'outstanding' ? remainingBalance(p) > 0 :
+      view === 'outstanding' ? (remainingBalance(p) > 0 && !p.badDebt) :
       view === 'ready' ? p.readyForBilling :
-      view === 'paid' ? status === 'Fully paid' : true
+      view === 'paid' ? status === 'Fully paid' :
+      view === 'bad-debt' ? p.badDebt : true
     return matchSearch && matchView
   })
 
   // Sorting
   const sorted = [...filtered].sort((a, b) => {
     let av: string | number = 0, bv: string | number = 0
-    if (sortKey === 'month') { av = a.month; bv = b.month }
+    if (sortKey === 'month') { av = new Date(Date.parse(a.month + ' 1')).getTime() || 0; bv = new Date(Date.parse(b.month + ' 1')).getTime() || 0 }
     else if (sortKey === 'client') { av = a.startup; bv = b.startup }
     else if (sortKey === 'amount') { av = a.amount; bv = b.amount }
     else if (sortKey === 'balance') { av = remainingBalance(a); bv = remainingBalance(b) }
@@ -327,6 +329,9 @@ export default function App() {
         .badge-new { background: var(--green-bg); color: var(--green-text); }
         .badge-repeat { background: var(--amber-bg); color: var(--amber-text); }
         .badge-ready { background: var(--amber-bg); color: var(--amber-text); }
+        .badge-baddebt { background: #2d1212; color: #e07070; font-weight: 600; }
+        @media (prefers-color-scheme: light) { .badge-baddebt { background: #fce8e8; color: #8b1a1a; } }
+        tr.baddebt-row td:first-child { border-left: 3px solid var(--red); }
         .sort-arrow { margin-left: 3px; opacity: 0.5; }
         .panel-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.3); z-index: 30; display: flex; justify-content: flex-end; }
         .panel { background: var(--surface); width: min(560px, 100vw); height: 100vh; overflow-y: auto; border-left: 0.5px solid var(--border); padding: 1.5rem; }
@@ -365,7 +370,7 @@ export default function App() {
         <div className="nav-inner">
           <span className="nav-brand">Numberly Billing</span>
           <div className="nav-views">
-            {([['all','All'],['outstanding','Outstanding'],['ready','Ready to bill'],['paid','Paid']] as [View,string][]).map(([v,l]) => (
+            {([['all','All'],['outstanding','Outstanding'],['ready','Ready to bill'],['paid','Paid'],['bad-debt','Bad Debt'],['charts','Charts']] as [View,string][]).map(([v,l]) => (
               <button key={v} className={`nav-view ${view===v?'active':''}`} onClick={() => setView(v)}>{l}{v==='ready'&&readyCount>0?` (${readyCount})`:''}</button>
             ))}
           </div>
@@ -400,12 +405,15 @@ export default function App() {
           </div>
         )}
 
+        {view !== 'charts' && (
         <div className="toolbar">
           <input type="text" placeholder="Search client, contact, month..." value={search} onChange={e => setSearch(e.target.value)} />
           <span style={{ fontSize: 11, color: 'var(--text3)' }}>{sorted.length} project{sorted.length !== 1 ? 's' : ''}</span>
           {search && <button className="btn" onClick={() => setSearch('')}>Clear</button>}
         </div>
+        )}
 
+        {view === 'charts' ? <ChartsView projects={projects} /> : (<>
         <div className="scroll-hint">↔ Scroll horizontally to see all columns</div>
         <div className="table-wrap">
           <table>
@@ -417,7 +425,6 @@ export default function App() {
               <col style={{ width: 60 }} />
               <col style={{ width: 130 }} />
               <col style={{ width: 90 }} />
-              <col style={{ width: 200 }} />
               <col style={{ width: 90 }} />
               <col style={{ width: 100 }} />
               <col style={{ width: 90 }} />
@@ -433,7 +440,6 @@ export default function App() {
                 <th>Sold by</th>
                 <th>Contact</th>
                 <th onClick={() => toggleSort('amount')} className={sortKey==='amount'?'sorted':''}>Booked<span className="sort-arrow">{sortKey==='amount'?(sortDir==='asc'?'↑':'↓'):'↕'}</span></th>
-                <th>Billing details</th>
                 <th>Billing thru</th>
                 <th onClick={() => toggleSort('status')} className={sortKey==='status'?'sorted':''}>Status<span className="sort-arrow">{sortKey==='status'?(sortDir==='asc'?'↑':'↓'):'↕'}</span></th>
                 <th>Net recv.</th>
@@ -443,13 +449,13 @@ export default function App() {
             </thead>
             <tbody>
               {sorted.length === 0 && (
-                <tr><td colSpan={13}><div className="empty">{loading ? 'Loading projects…' : 'No projects found'}</div></td></tr>
+                <tr><td colSpan={12}><div className="empty">{loading ? 'Loading projects…' : 'No projects found'}</div></td></tr>
               )}
               {sorted.map(p => {
                 const status = paymentStatus(p)
                 const bal = remainingBalance(p)
                 const net = totalNetReceived(p)
-                const rowClass = p.readyForBilling ? 'ready-row' : status === 'Fully paid' ? 'paid-row' : ''
+                const rowClass = p.readyForBilling ? 'ready-row' : p.badDebt ? 'baddebt-row' : status === 'Fully paid' ? 'paid-row' : ''
                 return (
                   <tr key={p.id} className={rowClass}>
                     <td style={{ textAlign: 'center' }}>
@@ -464,10 +470,9 @@ export default function App() {
                     <td><InlineEdit id={p.id} field="soldBy" value={p.soldBy} /></td>
                     <td><InlineEdit id={p.id} field="contact" value={p.contact} /></td>
                     <td className="amt"><InlineEdit id={p.id} field="amount" value={p.amount} type="number" /></td>
-                    <td><InlineEdit id={p.id} field="billingDetails" value={p.billingDetails} /></td>
                     <td><InlineEdit id={p.id} field="billingThru" value={p.billingThru} options={['UW','Stripe','Bank Transfer','Open Link']} /></td>
                     <td>
-                      <span className={`badge badge-${status === 'Fully paid' ? 'paid' : status === 'Partial' ? 'partial' : 'unpaid'}`}>{status}</span>
+                      <span className={`badge badge-${status === 'Fully paid' ? 'paid' : status === 'Partial' ? 'partial' : status === 'Bad Debt' ? 'baddebt' : 'unpaid'}`}>{status}</span>
                       {p.readyForBilling && <span className="badge badge-ready" style={{ marginLeft: 4 }}>Ready</span>}
                     </td>
                     <td className="amt" style={{ color: 'var(--green)' }}>{fmt(net)}</td>
@@ -479,6 +484,7 @@ export default function App() {
             </tbody>
           </table>
         </div>
+        </>)}
       </div>
 
       {/* DETAIL PANEL */}
@@ -507,7 +513,7 @@ export default function App() {
                 <div className="metric-value" style={{ fontSize: 15 }}>
                   {(() => {
                     const status = paymentStatus(detail)
-                    return <span className={`badge badge-${status === 'Fully paid' ? 'paid' : status === 'Partial' ? 'partial' : 'unpaid'}`}>{status}</span>
+                    return <span className={`badge badge-${status === 'Fully paid' ? 'paid' : status === 'Partial' ? 'partial' : status === 'Bad Debt' ? 'baddebt' : 'unpaid'}`}>{status}</span>
                   })()}
                 </div>
               </div>
@@ -560,6 +566,14 @@ export default function App() {
                   id={`rfb-${detail.id}`} />
                 <label htmlFor={`rfb-${detail.id}`} style={{ fontSize: 12, color: 'var(--text)', cursor: 'pointer', textTransform: 'none', letterSpacing: 0 }}>
                   Mark as ready to bill (work done, invoice not sent yet)
+                </label>
+              </div>
+              <div className="pe-group full" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input type="checkbox" checked={detail.badDebt}
+                  onChange={e => updateField(detail.id, 'badDebt', e.target.checked)}
+                  id={`bd-${detail.id}`} />
+                <label htmlFor={`bd-${detail.id}`} style={{ fontSize: 12, color: 'var(--red)', cursor: 'pointer', textTransform: 'none', letterSpacing: 0 }}>
+                  Mark as Bad Debt (project will not be collected)
                 </label>
               </div>
             </div>
