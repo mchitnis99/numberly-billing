@@ -203,7 +203,6 @@ export const ALLOC_COLORS: Record<string, string> = {
 }
 
 // CSV import — maps column headers from the Google Sheet to Project fields
-let _csvDebugLogged = false
 export function parseCSVRow(headers: string[], row: string[]): Partial<Project> | null {
   const allIdx: Record<string, number[]> = {}
   headers.forEach((h, i) => {
@@ -220,18 +219,6 @@ export function parseCSVRow(headers: string[], row: string[]): Partial<Project> 
     const indices = allIdx[name.trim().toLowerCase()]
     const i = indices?.[n] ?? -1
     return i >= 0 ? (row[i] || '').trim() : ''
-  }
-
-  // Temporary debug — logs only for the first data row processed
-  if (!_csvDebugLogged) {
-    _csvDebugLogged = true
-    console.log('[debug] row length:', row.length)
-    console.log('[debug] headers length:', headers.length)
-    console.log('[debug] first 5 headers:', headers.slice(0, 5))
-    console.log('[debug] allIdx keys (first 10):', Object.keys(allIdx).slice(0, 10))
-    console.log('[debug] col("booked amount"):', col('booked amount'))
-    console.log('[debug] col("1st invoice number"):', col('1st invoice number'))
-    console.log('[debug] colN("payment date", 0):', colN('payment date', 0))
   }
 
   const client = col('startups')
