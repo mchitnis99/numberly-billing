@@ -66,14 +66,17 @@ const darkTooltip: React.CSSProperties = {
 }
 
 export function ChartsView({ projects }: { projects: Project[] }) {
-  // Monthly billings — all months with data, sorted chronologically
-  const monthMap: Record<string, number> = {}
+  // Monthly booked vs collected — all months with data, sorted chronologically
+  const monthMap: Record<string, { Booked: number; Collected: number }> = {}
   projects.forEach(p => {
     const m = normalizeMonth(p.month)
-    if (m) monthMap[m] = (monthMap[m] || 0) + p.amount
+    if (!m) return
+    if (!monthMap[m]) monthMap[m] = { Booked: 0, Collected: 0 }
+    monthMap[m].Booked += p.amount
+    monthMap[m].Collected += totalNetReceived(p)
   })
   const monthlyData = Object.entries(monthMap)
-    .map(([month, amount]) => ({ month, amount }))
+    .map(([month, vals]) => ({ month, ...vals }))
     .sort((a, b) => monthToNum(a.month) - monthToNum(b.month))
 
   // Annual — booked and collected per year
@@ -106,14 +109,16 @@ export function ChartsView({ projects }: { projects: Project[] }) {
     <div style={{ padding: '1.5rem 0', display: 'flex', flexDirection: 'column', gap: '2.5rem' }}>
 
       <div>
-        <div style={sectionLabel}>Monthly Billings</div>
+        <div style={sectionLabel}>Monthly Booked vs Collected</div>
         <ResponsiveContainer width="100%" height={280}>
-          <BarChart data={monthlyData} margin={{ top: 4, right: 16, bottom: 52, left: 56 }}>
+          <BarChart data={monthlyData} margin={{ top: 4, right: 16, bottom: 52, left: 56 }} barGap={2} barCategoryGap="30%">
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
             <XAxis dataKey="month" angle={-45} textAnchor="end" tick={{ fontSize: 10, fill: 'var(--text2)' }} interval={0} />
             <YAxis tickFormatter={tickFmt} tick={{ fontSize: 10, fill: 'var(--text2)' }} axisLine={false} tickLine={false} />
-            <Tooltip formatter={(v) => [fmt(v as number), 'Booked']} cursor={{ fill: 'rgba(255,255,255,0.05)' }} contentStyle={darkTooltip} />
-            <Bar dataKey="amount" fill="#1D9E75" name="Booked" radius={[3, 3, 0, 0]} />
+            <Tooltip formatter={(v, name) => [fmt(v as number), name]} cursor={{ fill: 'rgba(255,255,255,0.04)' }} contentStyle={darkTooltip} />
+            <Legend wrapperStyle={{ fontSize: 11, paddingTop: 48 }} />
+            <Bar dataKey="Booked" fill="#534AB7" radius={[3, 3, 0, 0]} background={{ fill: 'transparent' }} />
+            <Bar dataKey="Collected" fill="#1D9E75" radius={[3, 3, 0, 0]} background={{ fill: 'transparent' }} />
           </BarChart>
         </ResponsiveContainer>
       </div>
@@ -127,8 +132,8 @@ export function ChartsView({ projects }: { projects: Project[] }) {
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
               <XAxis dataKey="year" tick={{ fontSize: 11, fill: 'var(--text2)' }} axisLine={false} tickLine={false} />
               <YAxis tickFormatter={tickFmt} tick={{ fontSize: 10, fill: 'var(--text2)' }} axisLine={false} tickLine={false} />
-              <Tooltip formatter={(v) => [fmt(v as number), 'Booked']} contentStyle={tooltipStyle} />
-              <Bar dataKey="Booked" fill="#534AB7" radius={[3, 3, 0, 0]} />
+              <Tooltip formatter={(v) => [fmt(v as number), 'Booked']} cursor={{ fill: 'rgba(255,255,255,0.04)' }} contentStyle={tooltipStyle} />
+              <Bar dataKey="Booked" fill="#534AB7" radius={[3, 3, 0, 0]} background={{ fill: 'transparent' }} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -139,15 +144,15 @@ export function ChartsView({ projects }: { projects: Project[] }) {
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
               <XAxis dataKey="year" tick={{ fontSize: 11, fill: 'var(--text2)' }} axisLine={false} tickLine={false} />
               <YAxis tickFormatter={tickFmt} tick={{ fontSize: 10, fill: 'var(--text2)' }} axisLine={false} tickLine={false} />
-              <Tooltip formatter={(v) => [fmt(v as number), 'Collected']} contentStyle={tooltipStyle} />
-              <Bar dataKey="Collected" fill="#1D9E75" radius={[3, 3, 0, 0]} />
+              <Tooltip formatter={(v) => [fmt(v as number), 'Collected']} cursor={{ fill: 'rgba(255,255,255,0.04)' }} contentStyle={tooltipStyle} />
+              <Bar dataKey="Collected" fill="#1D9E75" radius={[3, 3, 0, 0]} background={{ fill: 'transparent' }} />
             </BarChart>
           </ResponsiveContainer>
         </div>
       </div>
 
       <div>
-        <div style={sectionLabel}>2026 Billings by Delivery Type</div>
+        <div style={sectionLabel}>2026 Bookings by Delivery Type</div>
         {deliveries.length === 0
           ? <p style={{ fontSize: 12, color: 'var(--text3)' }}>No 2026 data yet.</p>
           : (
@@ -156,7 +161,7 @@ export function ChartsView({ projects }: { projects: Project[] }) {
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
                 <XAxis dataKey="month" tick={{ fontSize: 10, fill: 'var(--text2)' }} axisLine={false} tickLine={false} />
                 <YAxis tickFormatter={tickFmt} tick={{ fontSize: 10, fill: 'var(--text2)' }} axisLine={false} tickLine={false} />
-                <Tooltip formatter={(v) => fmt(v as number)} contentStyle={tooltipStyle} />
+                <Tooltip formatter={(v) => fmt(v as number)} cursor={{ fill: 'rgba(255,255,255,0.04)' }} contentStyle={tooltipStyle} />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
                 {deliveries.map((d, i) => (
                   <Bar
@@ -165,6 +170,7 @@ export function ChartsView({ projects }: { projects: Project[] }) {
                     stackId="a"
                     fill={DELIVERY_COLORS[d] || FALLBACK_COLORS[i % FALLBACK_COLORS.length]}
                     radius={i === deliveries.length - 1 ? [3, 3, 0, 0] : undefined}
+                    background={{ fill: 'transparent' }}
                   />
                 ))}
               </BarChart>
