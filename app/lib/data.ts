@@ -222,6 +222,7 @@ export const ALLOC_COLORS: Record<string, string> = {
 }
 
 // CSV import — maps column headers from the Google Sheet to Project fields
+let _csvDebugLogged = false
 export function parseCSVRow(headers: string[], row: string[]): Partial<Project> | null {
   const allIdx: Record<string, number[]> = {}
   headers.forEach((h, i) => {
@@ -230,15 +231,29 @@ export function parseCSVRow(headers: string[], row: string[]): Partial<Project> 
     allIdx[key].push(i)
   })
 
+  // Exact match first; fall back to partial includes, preferring the shortest key
   const col = (name: string): string => {
     const key = name.trim().toLowerCase()
-    // Exact match first; fall back to partial includes, preferring the shortest matching key
-    const exactIdx = allIdx[key]
-    if (exactIdx) return (row[exactIdx[0]] || '').trim()
+    const exact = allIdx[key]
+    if (exact) return (row[exact[0]] || '').trim()
     const matches = Object.keys(allIdx).filter(k => k.includes(key))
     if (matches.length === 0) return ''
     matches.sort((a, b) => a.length - b.length)
     return (row[allIdx[matches[0]][0]] || '').trim()
+  }
+
+  // Nth occurrence of a header (0-indexed), exact-then-partial same as col()
+  const colN = (name: string, n: number): string => {
+    const key = name.trim().toLowerCase()
+    let indices = allIdx[key]
+    if (!indices) {
+      const matches = Object.keys(allIdx).filter(k => k.includes(key))
+      if (matches.length === 0) return ''
+      matches.sort((a, b) => a.length - b.length)
+      indices = allIdx[matches[0]]
+    }
+    const i = indices?.[n] ?? -1
+    return i >= 0 ? (row[i] || '').trim() : ''
   }
 
   const client = col('startups')
@@ -258,12 +273,20 @@ export function parseCSVRow(headers: string[], row: string[]): Partial<Project> 
   const newrep = col('new') ? 'New' : col('repeat') ? 'Repeat' : 'New'
   const bookedAmt = parseAmt(col('booked amount'))
   const bookedStatus = col('booked amount status')
-  const net = parseAmt(col('total net payment'))
-  const importedBalance = parseAmt(col('remaining billable'))
-  const isCsvPaid = (bookedStatus === 'Fully paid' || bookedStatus === 'Partial')
+  const balance = parseAmt(col('balance'))
+  const invNet = parseAmt(colN('total payment', 0))
+  const invStripeFee = parseAmt(colN('stripe/upwork fee', 0))
+  // An invoice counts as paid if any payment has been made (balance < booked amount)
+  const isCsvPaid = bookedAmt > 0 && balance < bookedAmt
+
+  if (!_csvDebugLogged) {
+    _csvDebugLogged = true
+    console.log('[csv] bookedAmt:', bookedAmt, 'balance:', balance, 'inv.net:', invNet, 'isPaid:', isCsvPaid)
+  }
+
   const invoice: Invoice = {
     num: '', date: '', amt: bookedAmt, due: '', paid: isCsvPaid ? 'imported' : '',
-    net: isCsvPaid ? net : 0, uwFee: 0, stripeFee: 0, isPaid: isCsvPaid,
+    net: invNet, uwFee: 0, stripeFee: invStripeFee, isPaid: isCsvPaid,
   }
 
   return {
@@ -285,7 +308,7 @@ export function parseCSVRow(headers: string[], row: string[]): Partial<Project> 
     billingThru: col('billing thru'),
     invoicingValue: col('invoicing value'),
     billingDetails: bookedStatus,
-    importedBalance,
+    importedBalance: balance,
     notes: col('notes'),
     readyForBilling: false,
     invoices: [invoice],
