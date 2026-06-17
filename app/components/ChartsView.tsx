@@ -6,19 +6,38 @@ import {
 import { Project, totalNetReceived, fmt } from '../lib/data'
 
 const MONTH_ORDER = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-function monthToNum(m: string): number {
-  const parts = m.replace(/,/g, '').trim().split(' ')
-  const mon = MONTH_ORDER.indexOf(parts[0])
-  const yr = parseInt(parts[1]) || 0
-  return yr * 100 + mon
+
+function parseYearAndMon(m: string): { mon: number; fullYr: number } {
+  const cleaned = m.replace(/,/g, '').trim()
+  const dashMatch = cleaned.match(/^([A-Za-z]+)-(\d{2,4})$/)
+  if (dashMatch) {
+    const mon = MONTH_ORDER.indexOf(dashMatch[1])
+    const yr = parseInt(dashMatch[2])
+    return { mon, fullYr: yr < 100 ? (yr > 50 ? 1900 + yr : 2000 + yr) : yr }
+  }
+  const spaceMatch = cleaned.match(/^([A-Za-z]+)\s+(\d{2,4})$/)
+  if (spaceMatch) {
+    const mon = MONTH_ORDER.indexOf(spaceMatch[1])
+    const yr = parseInt(spaceMatch[2])
+    return { mon, fullYr: yr < 100 ? (yr > 50 ? 1900 + yr : 2000 + yr) : yr }
+  }
+  return { mon: -1, fullYr: 0 }
 }
 
-function normalizeMonth(m: string) {
-  return m.replace(/,/g, '').trim()
+function monthToNum(m: string): number {
+  const { mon, fullYr } = parseYearAndMon(m)
+  return fullYr * 100 + mon
+}
+
+function normalizeMonth(m: string): string {
+  const { mon, fullYr } = parseYearAndMon(m)
+  if (mon < 0 || fullYr === 0) return m.replace(/,/g, '').trim()
+  return MONTH_ORDER[mon] + ' ' + fullYr
 }
 
 function extractYear(m: string): string {
-  return normalizeMonth(m).split(' ').pop() || ''
+  const { fullYr } = parseYearAndMon(m)
+  return fullYr > 0 ? String(fullYr) : ''
 }
 
 const DELIVERY_COLORS: Record<string, string> = {

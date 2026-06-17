@@ -286,7 +286,23 @@ export function parseCSVRow(headers: string[], row: string[]): Partial<Project> 
 
   return {
     newrep,
-    month: col('month').replace(/,/g, '').trim(),
+    month: (() => {
+      const raw = col('month').replace(/,/g, '').trim()
+      const MONTH_ORDER = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+      const dash = raw.match(/^([A-Za-z]+)-(\d{2,4})$/)
+      if (dash) {
+        const yr = parseInt(dash[2])
+        const fullYr = yr < 100 ? (yr > 50 ? 1900 + yr : 2000 + yr) : yr
+        return dash[1] + ' ' + fullYr
+      }
+      const space = raw.match(/^([A-Za-z]+)\s+(\d{2,4})$/)
+      if (space) {
+        const yr = parseInt(space[2])
+        const fullYr = yr < 100 ? (yr > 50 ? 1900 + yr : 2000 + yr) : yr
+        return MONTH_ORDER[MONTH_ORDER.indexOf(space[1])] + ' ' + fullYr
+      }
+      return raw
+    })(),
     channel: col('channel'),
     delivery: col('delivery'),
     startup: client,

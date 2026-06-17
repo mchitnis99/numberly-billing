@@ -4,10 +4,22 @@ import { Project, totalNetReceived, fmt, ALLOC_COLORS } from '../lib/data'
 
 const MONTH_ORDER = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 function monthToNum(m: string): number {
-  const parts = m.trim().replace(/,/g, '').split(' ')
-  const mon = MONTH_ORDER.indexOf(parts[0])
-  const yr = parseInt(parts[1]) || 0
-  return yr * 100 + mon
+  const cleaned = m.replace(/,/g, '').trim()
+  const dashMatch = cleaned.match(/^([A-Za-z]+)-(\d{2,4})$/)
+  if (dashMatch) {
+    const mon = MONTH_ORDER.indexOf(dashMatch[1])
+    const yr = parseInt(dashMatch[2])
+    const fullYr = yr < 100 ? (yr > 50 ? 1900 + yr : 2000 + yr) : yr
+    return fullYr * 100 + mon
+  }
+  const spaceMatch = cleaned.match(/^([A-Za-z]+)\s+(\d{2,4})$/)
+  if (spaceMatch) {
+    const mon = MONTH_ORDER.indexOf(spaceMatch[1])
+    const yr = parseInt(spaceMatch[2])
+    const fullYr = yr < 100 ? (yr > 50 ? 1900 + yr : 2000 + yr) : yr
+    return fullYr * 100 + mon
+  }
+  return 0
 }
 
 type MemberKey = 'J' | 'M' | 'N' | 'A' | 'G'

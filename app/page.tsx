@@ -14,10 +14,22 @@ type View = 'all' | 'outstanding' | 'ready' | 'paid' | 'bad-debt' | 'charts' | '
 
 const MONTH_ORDER = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 function monthToNum(m: string): number {
-  const parts = m.trim().replace(/,/g, '').split(' ')
-  const mon = MONTH_ORDER.indexOf(parts[0])
-  const yr = parseInt(parts[1]) || 0
-  return yr * 100 + mon
+  const cleaned = m.replace(/,/g, '').trim()
+  const dashMatch = cleaned.match(/^([A-Za-z]+)-(\d{2,4})$/)
+  if (dashMatch) {
+    const mon = MONTH_ORDER.indexOf(dashMatch[1])
+    const yr = parseInt(dashMatch[2])
+    const fullYr = yr < 100 ? (yr > 50 ? 1900 + yr : 2000 + yr) : yr
+    return fullYr * 100 + mon
+  }
+  const spaceMatch = cleaned.match(/^([A-Za-z]+)\s+(\d{2,4})$/)
+  if (spaceMatch) {
+    const mon = MONTH_ORDER.indexOf(spaceMatch[1])
+    const yr = parseInt(spaceMatch[2])
+    const fullYr = yr < 100 ? (yr > 50 ? 1900 + yr : 2000 + yr) : yr
+    return fullYr * 100 + mon
+  }
+  return 0
 }
 
 const emptyInv = (): Invoice => ({ num: '', date: '', amt: 0, due: '', paid: '', net: 0, uwFee: 0, stripeFee: 0, isPaid: false })
@@ -197,19 +209,22 @@ export default function App() {
   }), [projects, view, search])
 
   // Sorting
-  const sorted = useMemo(() => [...filtered].sort((a, b) => {
-    let av: string | number = 0, bv: string | number = 0
-    if (sortKey === 'month') { av = monthToNum(a.month); bv = monthToNum(b.month) }
-    else if (sortKey === 'client') { av = a.startup; bv = b.startup }
-    else if (sortKey === 'amount') { av = a.amount; bv = b.amount }
-    else if (sortKey === 'balance') { av = remainingBalance(a); bv = remainingBalance(b) }
-    else if (sortKey === 'status') { av = paymentStatus(a); bv = paymentStatus(b) }
-    else if (sortKey === 'date') { av = a.date; bv = b.date }
-    else if (sortKey === 'readyForBilling') { av = a.readyForBilling ? 1 : 0; bv = b.readyForBilling ? 1 : 0 }
-    if (av < bv) return sortDir === 'asc' ? -1 : 1
-    if (av > bv) return sortDir === 'asc' ? 1 : -1
-    return 0
-  }), [filtered, sortKey, sortDir])
+  const sorted = useMemo(() => {
+    const result = [...filtered].sort((a, b) => {
+      let av: string | number = 0, bv: string | number = 0
+      if (sortKey === 'month') { av = monthToNum(a.month); bv = monthToNum(b.month) }
+      else if (sortKey === 'client') { av = a.startup; bv = b.startup }
+      else if (sortKey === 'amount') { av = a.amount; bv = b.amount }
+      else if (sortKey === 'balance') { av = remainingBalance(a); bv = remainingBalance(b) }
+      else if (sortKey === 'status') { av = paymentStatus(a); bv = paymentStatus(b) }
+      else if (sortKey === 'date') { av = a.date; bv = b.date }
+      else if (sortKey === 'readyForBilling') { av = a.readyForBilling ? 1 : 0; bv = b.readyForBilling ? 1 : 0 }
+      if (av < bv) return sortDir === 'asc' ? -1 : 1
+      if (av > bv) return sortDir === 'asc' ? 1 : -1
+      return 0
+    })
+    return result
+  }, [filtered, sortKey, sortDir])
 
   function toggleSort(k: SortKey) {
     if (sortKey === k) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
