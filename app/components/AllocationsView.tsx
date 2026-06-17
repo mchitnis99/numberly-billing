@@ -107,7 +107,7 @@ export function AllocationsView({ projects }: { projects: Project[] }) {
         setDevEarnings(prev => existing ? prev.map(d => d.id === existing.id ? updated : d) : [...prev, updated])
       }
     } catch (err) {
-      console.error('Failed to save', err)
+      console.error('Failed to save', JSON.stringify(err))
     }
   }
 
