@@ -190,6 +190,7 @@ export function paymentStatus(p: Project): 'Fully paid' | 'Partial' | 'Unpaid' |
 }
 
 export function invoiceNet(inv: Invoice): number {
+  if ((inv.net || 0) > 0) return inv.net
   return Math.max(0, (inv.amt || 0) - (inv.uwFee || 0) - (inv.stripeFee || 0))
 }
 
