@@ -212,7 +212,11 @@ export default function App() {
   })
 
   function toggleSort(k: SortKey) {
-    if (sortKey === k) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+    if (sortKey === k) setSortDir(d => {
+      const next = d === 'asc' ? 'desc' : 'asc'
+      console.log('[sort] key:', k, 'dir:', d, '→', next)
+      return next
+    })
     else { setSortKey(k); setSortDir('desc') }
   }
 

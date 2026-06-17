@@ -5,8 +5,20 @@ import {
 } from 'recharts'
 import { Project, totalNetReceived, fmt } from '../lib/data'
 
-function parseMonthDate(s: string): number {
-  return new Date(Date.parse(s + ' 1')).getTime() || 0
+const MONTH_ORDER = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+function monthToNum(m: string): number {
+  const parts = m.replace(/,/g, '').trim().split(' ')
+  const mon = MONTH_ORDER.indexOf(parts[0])
+  const yr = parseInt(parts[1]) || 0
+  return yr * 100 + mon
+}
+
+function normalizeMonth(m: string) {
+  return m.replace(/,/g, '').trim()
+}
+
+function extractYear(m: string): string {
+  return normalizeMonth(m).split(' ').pop() || ''
 }
 
 const DELIVERY_COLORS: Record<string, string> = {
@@ -30,38 +42,44 @@ const tooltipStyle: React.CSSProperties = {
   border: '0.5px solid var(--border)', background: 'var(--surface)',
 }
 
+const darkTooltip: React.CSSProperties = {
+  backgroundColor: '#1a2744', border: '1px solid #2a3a5c', borderRadius: 6, color: '#f0f0ec', fontSize: 12,
+}
+
 export function ChartsView({ projects }: { projects: Project[] }) {
   // Monthly billings — all months with data, sorted chronologically
   const monthMap: Record<string, number> = {}
   projects.forEach(p => {
-    if (p.month) monthMap[p.month] = (monthMap[p.month] || 0) + p.amount
+    const m = normalizeMonth(p.month)
+    if (m) monthMap[m] = (monthMap[m] || 0) + p.amount
   })
   const monthlyData = Object.entries(monthMap)
     .map(([month, amount]) => ({ month, amount }))
-    .sort((a, b) => parseMonthDate(a.month) - parseMonthDate(b.month))
+    .sort((a, b) => monthToNum(a.month) - monthToNum(b.month))
 
-  // Annual billings — booked vs collected per year
+  // Annual — booked and collected per year
   const annualMap: Record<string, { Booked: number; Collected: number }> = {}
   projects.forEach(p => {
-    const yr = p.month?.trim().split(' ').pop()
+    const yr = extractYear(p.month)
     if (!yr) return
     if (!annualMap[yr]) annualMap[yr] = { Booked: 0, Collected: 0 }
     annualMap[yr].Booked += p.amount
     annualMap[yr].Collected += totalNetReceived(p)
   })
+  console.log('[chart] years:', [...new Set(projects.map(p => extractYear(p.month)))])
   const annualData = ['2025', '2026'].map(yr => ({
     year: yr, ...(annualMap[yr] || { Booked: 0, Collected: 0 }),
   }))
 
   // 2026 billings by delivery type — stacked bar per month
-  const projects2026 = projects.filter(p => p.month?.trim().includes('2026'))
+  const projects2026 = projects.filter(p => extractYear(p.month) === '2026')
   const deliveries = [...new Set(projects2026.map(p => p.delivery?.trim()))].filter(Boolean).sort()
   const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
   const deliveryData = MONTHS.map(m => {
     const month = m + ' 2026'
     const row: Record<string, string | number> = { month: m }
     deliveries.forEach(d => {
-      row[d] = projects.filter(p => p.month?.trim() === month && p.delivery?.trim() === d).reduce((s, p) => s + p.amount, 0)
+      row[d] = projects.filter(p => normalizeMonth(p.month) === month && p.delivery?.trim() === d).reduce((s, p) => s + p.amount, 0)
     })
     return row
   })
@@ -76,23 +94,38 @@ export function ChartsView({ projects }: { projects: Project[] }) {
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
             <XAxis dataKey="month" angle={-45} textAnchor="end" tick={{ fontSize: 10, fill: 'var(--text2)' }} interval={0} />
             <YAxis tickFormatter={tickFmt} tick={{ fontSize: 10, fill: 'var(--text2)' }} axisLine={false} tickLine={false} />
-            <Tooltip formatter={(v) => [fmt(v as number), 'Booked']} cursor={{ fill: 'rgba(255,255,255,0.05)' }} contentStyle={{ backgroundColor: '#1a2744', border: '1px solid #2a3a5c', borderRadius: 6, color: '#f0f0ec', fontSize: 12 }} />
+            <Tooltip formatter={(v) => [fmt(v as number), 'Booked']} cursor={{ fill: 'rgba(255,255,255,0.05)' }} contentStyle={darkTooltip} />
             <Bar dataKey="amount" fill="#1D9E75" name="Booked" radius={[3, 3, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>
 
-      <div>
-        <div style={sectionLabel}>Annual Collected — 2025 vs 2026</div>
-        <ResponsiveContainer width="100%" height={240}>
-          <BarChart data={annualData} margin={{ top: 4, right: 16, bottom: 8, left: 56 }}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
-            <XAxis dataKey="year" tick={{ fontSize: 11, fill: 'var(--text2)' }} axisLine={false} tickLine={false} />
-            <YAxis tickFormatter={tickFmt} tick={{ fontSize: 10, fill: 'var(--text2)' }} axisLine={false} tickLine={false} />
-            <Tooltip formatter={(v) => [fmt(v as number), 'Collected']} contentStyle={tooltipStyle} />
-            <Bar dataKey="Collected" fill="#1D9E75" radius={[3, 3, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
+      {/* Annual Booked + Collected side by side */}
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '2rem' }}>
+        <div>
+          <div style={sectionLabel}>Annual Booked — 2025 vs 2026</div>
+          <ResponsiveContainer width="100%" height={240}>
+            <BarChart data={annualData} margin={{ top: 4, right: 16, bottom: 8, left: 56 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
+              <XAxis dataKey="year" tick={{ fontSize: 11, fill: 'var(--text2)' }} axisLine={false} tickLine={false} />
+              <YAxis tickFormatter={tickFmt} tick={{ fontSize: 10, fill: 'var(--text2)' }} axisLine={false} tickLine={false} />
+              <Tooltip formatter={(v) => [fmt(v as number), 'Booked']} contentStyle={tooltipStyle} />
+              <Bar dataKey="Booked" fill="#534AB7" radius={[3, 3, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+        <div>
+          <div style={sectionLabel}>Annual Collected — 2025 vs 2026</div>
+          <ResponsiveContainer width="100%" height={240}>
+            <BarChart data={annualData} margin={{ top: 4, right: 16, bottom: 8, left: 56 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
+              <XAxis dataKey="year" tick={{ fontSize: 11, fill: 'var(--text2)' }} axisLine={false} tickLine={false} />
+              <YAxis tickFormatter={tickFmt} tick={{ fontSize: 10, fill: 'var(--text2)' }} axisLine={false} tickLine={false} />
+              <Tooltip formatter={(v) => [fmt(v as number), 'Collected']} contentStyle={tooltipStyle} />
+              <Bar dataKey="Collected" fill="#1D9E75" radius={[3, 3, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
       </div>
 
       <div>
