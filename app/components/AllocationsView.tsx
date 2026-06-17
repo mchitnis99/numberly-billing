@@ -84,27 +84,35 @@ function parseAllocationsCSV(text: string): { payouts: Omit<Payout, 'id'>[]; dev
   }
 
   // Row at index 1 contains months starting at column 3
+  // Step 1: normalize ALL headers first
   const headerRow = rows[1]
-  const monthCols: (string | null)[] = headerRow.map((cell, i) => {
+  const normalizedMonths: (string | null)[] = headerRow.map((cell, i) => {
     if (i < 3) return null
-    const val = cell.trim()
-    if (!val) return null
-    const lower = val.toLowerCase()
-    if (lower.includes('total') || lower.includes('last 12')) return null
-    const normalized = normalizeHeaderMonth(val)
-    if (monthToNum(normalized) < JAN_2025) return null
-    return normalized
+    return normalizeHeaderMonth(cell)
   })
 
+  // Step 2: filter AFTER normalization (skip empties, totals, pre-Jan-2025)
+  const monthCols: (string | null)[] = normalizedMonths.map((m) => {
+    if (!m) return null
+    const lower = m.toLowerCase()
+    if (lower.includes('total') || lower.includes('last 12')) return null
+    if (monthToNum(m) < JAN_2025) return null
+    return m
+  })
+
+  const membersFound: string[] = []
   const rawPayouts: { member: string; month: string; amount: number }[] = []
   const rawDevEarnings: { member: string; month: string; amount: number }[] = []
   let currentMember: MemberKey | null = null
+
+  console.log('[alloc] raw months:', rows[1].slice(3, 8))
+  console.log('[alloc] normalized months:', normalizedMonths.filter(Boolean).slice(0, 5))
 
   for (let i = 2; i < rows.length; i++) {
     const row = rows[i]
     const colB = (row[1] || '').trim()
     const memberKey = MEMBER_MAP[colB.toLowerCase()]
-    if (memberKey) { currentMember = memberKey; continue }
+    if (memberKey) { currentMember = memberKey; membersFound.push(colB); continue }
     if (!currentMember) continue
 
     const label = colB.toLowerCase()
@@ -133,6 +141,7 @@ function parseAllocationsCSV(text: string): { payouts: Omit<Payout, 'id'>[]; dev
     return Object.values(map)
   }
 
+  console.log('[alloc] members found:', membersFound)
   return { payouts: aggregate(rawPayouts), devEarnings: aggregate(rawDevEarnings) }
 }
 
