@@ -274,8 +274,8 @@ export function parseCSVRow(headers: string[], row: string[]): Partial<Project> 
   const bookedAmt = parseAmt(col('booked amount'))
   const bookedStatus = col('booked amount status')
   const balance = parseAmt(col('balance'))
-  const invNet = parseAmt(colN('total payment', 0))
-  const invStripeFee = parseAmt(colN('stripe/upwork fee', 0))
+  const invNet = parseAmt(colN('total payment', 0)) + parseAmt(colN('total payment', 1)) + parseAmt(colN('total payment', 2))
+  const invStripeFee = parseAmt(colN('stripe/upwork fee', 0)) + parseAmt(colN('stripe/upwork fee', 1)) + parseAmt(colN('stripe/upwork fee', 2))
   // An invoice counts as paid if any payment has been made (balance < booked amount)
   const isCsvPaid = bookedAmt > 0 && balance < bookedAmt
 
