@@ -20,7 +20,7 @@ function emptyProject(id: number): Project {
     modelDesc: '', soldBy: 'M', alloc: emptyAlloc(), description: '', upworkName: '', country: 'US',
     contact: '', email: '', date: '', amount: 0, billingThru: 'UW', invoicingValue: '',
     billingDetails: '',
-    readyForBilling: false, badDebt: false, notes: '', invoices: [emptyInv()]
+    readyForBilling: false, badDebt: false, importedBalance: 0, notes: '', invoices: [emptyInv()]
   }
 }
 
