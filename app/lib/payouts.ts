@@ -56,23 +56,3 @@ export async function upsertDevEarning(d: { id?: number; member: string; month: 
   if (error) throw error
   return data as DevEarning
 }
-
-export async function bulkUpsertPayouts(items: Omit<Payout, 'id'>[]): Promise<Payout[]> {
-  if (items.length === 0) return []
-  const { data, error } = await supabase
-    .from('payouts')
-    .upsert(items, { onConflict: 'member,month' })
-    .select()
-  if (error) throw error
-  return data as Payout[]
-}
-
-export async function bulkUpsertDevEarnings(items: Omit<DevEarning, 'id'>[]): Promise<DevEarning[]> {
-  if (items.length === 0) return []
-  const { data, error } = await supabase
-    .from('dev_earnings')
-    .upsert(items, { onConflict: 'member,month' })
-    .select()
-  if (error) throw error
-  return data as DevEarning[]
-}

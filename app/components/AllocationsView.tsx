@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { Project, totalNetReceived, fmt, ALLOC_COLORS } from '../lib/data'
-import { Payout, DevEarning, fetchPayouts, fetchDevEarnings, upsertPayout, upsertDevEarning, bulkUpsertPayouts, bulkUpsertDevEarnings } from '../lib/payouts'
+import { Payout, DevEarning, fetchPayouts, fetchDevEarnings, upsertPayout, upsertDevEarning } from '../lib/payouts'
 
 const MONTH_ORDER = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
@@ -32,124 +32,12 @@ function normalizeMonth(m: string): string {
   return MONTH_ORDER[mon] + ' ' + fullYr
 }
 
-// Character-by-character CSV parser — handles quoted multiline fields
-function parseCSV(text: string): string[][] {
-  const rows: string[][] = []
-  let cur = '', inQuotes = false, fields: string[] = []
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i], next = text[i + 1]
-    if (ch === '"') {
-      if (inQuotes && next === '"') { cur += '"'; i++ }
-      else inQuotes = !inQuotes
-    } else if (ch === ',' && !inQuotes) {
-      fields.push(cur.trim()); cur = ''
-    } else if ((ch === '\n' || ch === '\r') && !inQuotes) {
-      if (ch === '\r' && next === '\n') i++
-      fields.push(cur.trim()); cur = ''
-      if (fields.some(f => f !== '')) rows.push(fields)
-      fields = []
-    } else { cur += ch }
-  }
-  if (fields.length || cur) { fields.push(cur.trim()); if (fields.some(f => f !== '')) rows.push(fields) }
-  return rows
-}
+const JUL_2025 = 2025 * 100 + 6
 
-function parseAmount(s: string): number {
-  if (!s || s.trim() === '-' || s.trim() === '') return 0
-  const isNeg = s.startsWith('(') && s.endsWith(')')
-  const cleaned = s.replace(/[()$\s]/g, '').replace(/,/g, '')
-  const val = parseFloat(cleaned) || 0
-  return isNeg ? -val : val
-}
-
-const MEMBER_MAP: Record<string, MemberKey> = {
-  john: 'J', monica: 'M', altion: 'A', gaby: 'G', numberly: 'N',
-}
-
-const JAN_2025 = 2025 * 100 + 0  // monthToNum('Jan 2025')
-
-function parseAllocationsCSV(text: string): { payouts: Omit<Payout, 'id'>[]; devEarnings: Omit<DevEarning, 'id'>[] } {
-  const rows = parseCSV(text)
-  if (rows.length < 2) return { payouts: [], devEarnings: [] }
-
-  // Normalize month header cells: handles "Jan-25", "Jan 2025", "Jan-2025"
-  const normalizeHeaderMonth = (m: string): string => {
-    const s = m.trim()
-    const dashMatch = s.match(/^([A-Za-z]+)-(\d{2})$/)
-    if (dashMatch) {
-      const yr = parseInt(dashMatch[2])
-      return dashMatch[1] + ' ' + (yr <= 50 ? 2000 + yr : 1900 + yr)
-    }
-    return normalizeMonth(s)  // fall back to full parser for "Jan 2025", "Jan-2025", etc.
-  }
-
-  // Row at index 1 contains months starting at column 3
-  // Step 1: normalize ALL headers first
-  const headerRow = rows[1]
-  const normalizedMonths: (string | null)[] = headerRow.map((cell, i) => {
-    if (i < 3) return null
-    return normalizeHeaderMonth(cell)
-  })
-
-  // Step 2: filter AFTER normalization (skip empties, totals, pre-Jan-2025)
-  const monthCols: (string | null)[] = normalizedMonths.map((m) => {
-    if (!m) return null
-    const lower = m.toLowerCase()
-    if (lower.includes('total') || lower.includes('last 12')) return null
-    if (monthToNum(m) < JAN_2025) return null
-    return m
-  })
-
-  const membersFound: string[] = []
-  const rawPayouts: { member: string; month: string; amount: number }[] = []
-  const rawDevEarnings: { member: string; month: string; amount: number }[] = []
-  let currentMember: MemberKey | null = null
-
-  console.log('[alloc] raw months:', rows[1].slice(3, 8))
-  console.log('[alloc] normalized months:', normalizedMonths.filter(Boolean).slice(0, 5))
-
-  for (let i = 2; i < rows.length; i++) {
-    const row = rows[i]
-    const colB = (row[1] || '').trim()
-    const memberKey = MEMBER_MAP[colB.toLowerCase()]
-    if (memberKey) { currentMember = memberKey; membersFound.push(colB); continue }
-    if (!currentMember) continue
-
-    const label = colB.toLowerCase()
-    let rowType: 'dev' | 'payout' | null = null
-    if (label.includes('development earnings') || label.includes('other earnings')) rowType = 'dev'
-    else if (label.includes('cash paid out')) rowType = 'payout'
-    if (!rowType) continue
-
-    monthCols.forEach((month, colIdx) => {
-      if (!month) return
-      const amount = parseAmount(row[colIdx] || '')
-      if (amount === 0) return
-      if (rowType === 'dev') rawDevEarnings.push({ member: currentMember!, month, amount })
-      else rawPayouts.push({ member: currentMember!, month, amount })
-    })
-  }
-
-  // Aggregate: sum multiple rows (e.g. Dev Earnings + Other Earnings) for same member+month
-  function aggregate<T extends { member: string; month: string; amount: number }>(items: T[]): Omit<Payout, 'id'>[] {
-    const map: Record<string, { member: string; month: string; amount: number; note: string }> = {}
-    items.forEach(({ member, month, amount }) => {
-      const k = `${member}|${month}`
-      if (!map[k]) map[k] = { member, month, amount, note: '' }
-      else map[k].amount += amount
-    })
-    return Object.values(map)
-  }
-
-  console.log('[alloc] members found:', membersFound)
-  return { payouts: aggregate(rawPayouts), devEarnings: aggregate(rawDevEarnings) }
-}
-
-type MemberKey = 'J' | 'M' | 'N' | 'A' | 'G'
+type MemberKey = 'J' | 'M' | 'A' | 'G'
 const MEMBERS: { key: MemberKey; name: string }[] = [
   { key: 'J', name: 'John' },
   { key: 'M', name: 'Monica' },
-  { key: 'N', name: 'Numberly' },
   { key: 'A', name: 'Altion' },
   { key: 'G', name: 'Gaby' },
 ]
@@ -162,35 +50,30 @@ export function AllocationsView({ projects }: { projects: Project[] }) {
   const [collapsed, setCollapsed] = useState<Set<MemberKey>>(new Set())
   const [editState, setEditState] = useState<EditState>(null)
   const [editValue, setEditValue] = useState('')
-  const [importMsg, setImportMsg] = useState('')
-  const fileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     fetchPayouts().then(setPayouts).catch(console.error)
     fetchDevEarnings().then(setDevEarnings).catch(console.error)
   }, [])
 
-  // All months from earliest project to current month, chronological
+  // All months from Jul 2025 to current month, chronological
   const allMonths = useMemo((): string[] => {
-    const nums = projects.map(p => monthToNum(normalizeMonth(p.month))).filter(n => n > 0)
-    if (nums.length === 0) return []
-    const minNum = Math.min(...nums)
     const now = new Date()
     const maxNum = now.getFullYear() * 100 + now.getMonth()
     const result: string[] = []
-    let yr = Math.floor(minNum / 100)
-    let mon = minNum % 100
+    let yr = 2025, mon = 6  // Jul 2025
     while (yr * 100 + mon <= maxNum) {
       result.push(MONTH_ORDER[mon] + ' ' + yr)
       mon++
       if (mon >= 12) { mon = 0; yr++ }
     }
     return result
-  }, [projects])
+  }, [])
 
-  // Build running ledger rows for all members
+  // Build running ledger rows for all members, starting from opening balance
   const memberData = useMemo(() => MEMBERS.map(({ key, name }) => {
-    let running = 0
+    const openingBalance = payouts.find(p => p.member === key && p.month === 'Opening')?.amount || 0
+    let running = openingBalance
     const rows = allMonths.map(month => {
       const ps = projects.filter(p => normalizeMonth(p.month) === month)
       const revShare = ps.reduce((s, p) => s + totalNetReceived(p) * (p.alloc[key] || 0) / 100, 0)
@@ -205,8 +88,8 @@ export function AllocationsView({ projects }: { projects: Project[] }) {
     })
     const totalRevShare = rows.reduce((s, r) => s + r.revShare, 0)
     const totalPaidOut = rows.reduce((s, r) => s + r.payout, 0)
-    const currentBalance = rows.length > 0 ? rows[rows.length - 1].balance : 0
-    return { key, name, rows, totalRevShare, totalPaidOut, currentBalance }
+    const currentBalance = rows.length > 0 ? rows[rows.length - 1].balance : openingBalance
+    return { key, name, rows, openingBalance, totalRevShare, totalPaidOut, currentBalance }
   }), [projects, payouts, devEarnings, allMonths])
 
   async function commitEdit(member: MemberKey, month: string, field: 'payout' | 'dev') {
@@ -214,8 +97,9 @@ export function AllocationsView({ projects }: { projects: Project[] }) {
     setEditState(null)
     try {
       if (field === 'payout') {
+        const note = month === 'Opening' ? 'opening_balance' : ''
         const existing = payouts.find(p => p.member === member && p.month === month)
-        const updated = await upsertPayout({ id: existing?.id, member, month, amount, note: '' })
+        const updated = await upsertPayout({ id: existing?.id, member, month, amount, note })
         setPayouts(prev => existing ? prev.map(p => p.id === existing.id ? updated : p) : [...prev, updated])
       } else {
         const existing = devEarnings.find(d => d.member === member && d.month === month)
@@ -232,30 +116,6 @@ export function AllocationsView({ projects }: { projects: Project[] }) {
     setEditValue(current > 0 ? String(current) : '')
   }
 
-  async function handleAllocCSV(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    if (fileRef.current) fileRef.current.value = ''
-    const text = await file.text()
-    const { payouts: newPayouts, devEarnings: newEarnings } = parseAllocationsCSV(text)
-    if (newPayouts.length === 0 && newEarnings.length === 0) {
-      setImportMsg('No data found — check CSV format.')
-      return
-    }
-    try {
-      await Promise.all([
-        bulkUpsertPayouts(newPayouts),
-        bulkUpsertDevEarnings(newEarnings),
-      ])
-      const [updatedPayouts, updatedEarnings] = await Promise.all([fetchPayouts(), fetchDevEarnings()])
-      setPayouts(updatedPayouts)
-      setDevEarnings(updatedEarnings)
-      setImportMsg(`Imported ${newPayouts.length} payout${newPayouts.length !== 1 ? 's' : ''}, ${newEarnings.length} dev earning${newEarnings.length !== 1 ? 's' : ''}.`)
-    } catch (err) {
-      setImportMsg(`Import failed: ${err instanceof Error ? err.message : String(err)}`)
-    }
-  }
-
   function toggleCollapse(key: MemberKey) {
     setCollapsed(prev => {
       const next = new Set(prev)
@@ -267,15 +127,8 @@ export function AllocationsView({ projects }: { projects: Project[] }) {
   return (
     <div style={{ padding: '1.5rem 0', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
 
-      {/* Import toolbar */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <input ref={fileRef} type="file" accept=".csv" onChange={handleAllocCSV} style={{ display: 'none' }} />
-        <button className="btn" onClick={() => { setImportMsg(''); fileRef.current?.click() }}>⬆ Import Allocations CSV</button>
-        {importMsg && <span style={{ fontSize: 12, color: importMsg.startsWith('Import failed') ? 'var(--red)' : 'var(--green)' }}>{importMsg}</span>}
-      </div>
-
       {/* Summary cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
         {memberData.map(({ key, name, currentBalance, totalRevShare, totalPaidOut }) => (
           <div key={key} style={{ background: 'var(--surface2)', borderRadius: 'var(--radius)', padding: '0.75rem 1rem', border: '0.5px solid var(--border)' }}>
             <div style={{ fontSize: 10, color: ALLOC_COLORS[key], textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600, marginBottom: 4 }}>{name}</div>
@@ -287,9 +140,10 @@ export function AllocationsView({ projects }: { projects: Project[] }) {
       </div>
 
       {/* Per-member ledger */}
-      {memberData.map(({ key, name, rows, totalRevShare, totalPaidOut, currentBalance }) => {
+      {memberData.map(({ key, name, rows, openingBalance, totalRevShare, totalPaidOut, currentBalance }) => {
         const isCollapsed = collapsed.has(key)
         const totalDevEarning = rows.reduce((s, r) => s + r.devEarning, 0)
+        const isEditOpening = editState?.member === key && editState?.month === 'Opening' && editState?.field === 'payout'
         return (
           <div key={key} style={{ border: '0.5px solid var(--border)', borderRadius: 'var(--radius-lg)', overflow: 'hidden' }}>
 
@@ -311,101 +165,141 @@ export function AllocationsView({ projects }: { projects: Project[] }) {
             </div>
 
             {!isCollapsed && (
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                  <thead>
-                    <tr>
-                      <th>Month</th>
-                      <th style={{ textAlign: 'right' }}>Rev Share</th>
-                      <th style={{ textAlign: 'right' }}>Dev Earnings</th>
-                      <th style={{ textAlign: 'right' }}>Pay Available</th>
-                      <th style={{ textAlign: 'right' }}>Cash Paid Out</th>
-                      <th style={{ textAlign: 'right' }}>Balance</th>
-                      <th style={{ textAlign: 'right' }}>% Collected</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {rows.map(r => {
-                      const isEditDev = editState?.member === key && editState?.month === r.month && editState?.field === 'dev'
-                      const isEditPayout = editState?.member === key && editState?.month === r.month && editState?.field === 'payout'
-                      return (
-                        <tr key={r.month}>
-                          <td style={{ fontWeight: 500 }}>{r.month}</td>
+              <>
+                {/* Opening Balance row */}
+                <div style={{
+                  display: 'flex', alignItems: 'center', gap: 12,
+                  padding: '8px 14px', borderBottom: '0.5px solid var(--border)',
+                  background: 'var(--surface)',
+                }}>
+                  <span style={{ fontSize: 11, color: 'var(--text2)' }}>Opening Balance (as of Jun 30 2025):</span>
+                  {isEditOpening ? (
+                    <input
+                      autoFocus
+                      type="number"
+                      value={editValue}
+                      onChange={e => setEditValue(e.target.value)}
+                      onBlur={() => commitEdit(key, 'Opening', 'payout')}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') commitEdit(key, 'Opening', 'payout')
+                        if (e.key === 'Escape') setEditState(null)
+                      }}
+                      className="pe-input"
+                      style={{ width: 100, textAlign: 'right', fontSize: 12 }}
+                    />
+                  ) : (
+                    <span
+                      onClick={e => { e.stopPropagation(); startEdit(key, 'Opening', 'payout', openingBalance) }}
+                      title="Click to edit"
+                      style={{
+                        cursor: 'pointer',
+                        fontVariantNumeric: 'tabular-nums',
+                        borderBottom: '1px dashed var(--border2)',
+                        fontWeight: 500,
+                        color: openingBalance !== 0 ? 'var(--text)' : 'var(--text3)',
+                      }}
+                    >
+                      {openingBalance !== 0 ? fmt(openingBalance) : '+ set opening balance'}
+                    </span>
+                  )}
+                </div>
 
-                          {/* Rev Share */}
-                          <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: r.revShare > 0 ? ALLOC_COLORS[key] : 'var(--text3)' }}>
-                            {r.revShare > 0 ? fmt(r.revShare) : '—'}
-                          </td>
-
-                          {/* Dev Earnings — editable */}
-                          <td style={{ textAlign: 'right' }}>
-                            {isEditDev ? (
-                              <input autoFocus type="number" value={editValue}
-                                onChange={e => setEditValue(e.target.value)}
-                                onBlur={() => commitEdit(key, r.month, 'dev')}
-                                onKeyDown={e => { if (e.key === 'Enter') commitEdit(key, r.month, 'dev'); if (e.key === 'Escape') setEditState(null) }}
-                                className="pe-input"
-                                style={{ width: 80, textAlign: 'right', fontSize: 11 }} />
-                            ) : (
-                              <span onClick={() => startEdit(key, r.month, 'dev', r.devEarning)}
-                                title="Click to edit"
-                                style={{ cursor: 'pointer', fontVariantNumeric: 'tabular-nums', borderBottom: '1px dashed var(--border2)', color: r.devEarning > 0 ? 'var(--text)' : 'var(--text3)' }}>
-                                {r.devEarning > 0 ? fmt(r.devEarning) : '+ add'}
-                              </span>
-                            )}
-                          </td>
-
-                          {/* Pay Available */}
-                          <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: r.payAvailable > 0 ? 'var(--text)' : 'var(--text3)' }}>
-                            {r.payAvailable > 0 ? fmt(r.payAvailable) : '—'}
-                          </td>
-
-                          {/* Cash Paid Out — editable */}
-                          <td style={{ textAlign: 'right' }}>
-                            {isEditPayout ? (
-                              <input autoFocus type="number" value={editValue}
-                                onChange={e => setEditValue(e.target.value)}
-                                onBlur={() => commitEdit(key, r.month, 'payout')}
-                                onKeyDown={e => { if (e.key === 'Enter') commitEdit(key, r.month, 'payout'); if (e.key === 'Escape') setEditState(null) }}
-                                className="pe-input"
-                                style={{ width: 80, textAlign: 'right', fontSize: 11 }} />
-                            ) : (
-                              <span onClick={() => startEdit(key, r.month, 'payout', r.payout)}
-                                title="Click to edit"
-                                style={{ cursor: 'pointer', fontVariantNumeric: 'tabular-nums', borderBottom: '1px dashed var(--border2)', color: r.payout > 0 ? 'var(--red)' : 'var(--text3)' }}>
-                                {r.payout > 0 ? fmt(r.payout) : '+ add'}
-                              </span>
-                            )}
-                          </td>
-
-                          {/* Balance */}
-                          <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 500, color: r.balance > 0 ? 'var(--amber)' : r.balance < 0 ? 'var(--red)' : 'var(--text3)' }}>
-                            {r.balance !== 0 ? fmt(Math.abs(r.balance)) : '—'}
-                          </td>
-
-                          {/* % Collected */}
-                          <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--text2)' }}>
-                            {r.pctCollected > 0 ? r.pctCollected.toFixed(0) + '%' : '—'}
-                          </td>
-                        </tr>
-                      )
-                    })}
-
-                    {/* Total row */}
-                    {rows.length > 0 && (
-                      <tr style={{ borderTop: '1px solid var(--border2)', fontWeight: 600 }}>
-                        <td>Total</td>
-                        <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: ALLOC_COLORS[key] }}>{fmt(totalRevShare)}</td>
-                        <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{totalDevEarning > 0 ? fmt(totalDevEarning) : '—'}</td>
-                        <td></td>
-                        <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{totalPaidOut > 0 ? fmt(totalPaidOut) : '—'}</td>
-                        <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: currentBalance > 0 ? 'var(--amber)' : 'var(--text3)' }}>{fmt(currentBalance)}</td>
-                        <td></td>
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                    <thead>
+                      <tr>
+                        <th>Month</th>
+                        <th style={{ textAlign: 'right' }}>Rev Share</th>
+                        <th style={{ textAlign: 'right' }}>Dev Earnings</th>
+                        <th style={{ textAlign: 'right' }}>Pay Available</th>
+                        <th style={{ textAlign: 'right' }}>Cash Paid Out</th>
+                        <th style={{ textAlign: 'right' }}>Balance</th>
+                        <th style={{ textAlign: 'right' }}>% Collected</th>
                       </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {rows.map(r => {
+                        const isEditDev = editState?.member === key && editState?.month === r.month && editState?.field === 'dev'
+                        const isEditPayout = editState?.member === key && editState?.month === r.month && editState?.field === 'payout'
+                        return (
+                          <tr key={r.month}>
+                            <td style={{ fontWeight: 500 }}>{r.month}</td>
+
+                            {/* Rev Share */}
+                            <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: r.revShare > 0 ? ALLOC_COLORS[key] : 'var(--text3)' }}>
+                              {r.revShare > 0 ? fmt(r.revShare) : '—'}
+                            </td>
+
+                            {/* Dev Earnings — editable */}
+                            <td style={{ textAlign: 'right' }}>
+                              {isEditDev ? (
+                                <input autoFocus type="number" value={editValue}
+                                  onChange={e => setEditValue(e.target.value)}
+                                  onBlur={() => commitEdit(key, r.month, 'dev')}
+                                  onKeyDown={e => { if (e.key === 'Enter') commitEdit(key, r.month, 'dev'); if (e.key === 'Escape') setEditState(null) }}
+                                  className="pe-input"
+                                  style={{ width: 80, textAlign: 'right', fontSize: 11 }} />
+                              ) : (
+                                <span onClick={() => startEdit(key, r.month, 'dev', r.devEarning)}
+                                  title="Click to edit"
+                                  style={{ cursor: 'pointer', fontVariantNumeric: 'tabular-nums', borderBottom: '1px dashed var(--border2)', color: r.devEarning > 0 ? 'var(--text)' : 'var(--text3)' }}>
+                                  {r.devEarning > 0 ? fmt(r.devEarning) : '+ add'}
+                                </span>
+                              )}
+                            </td>
+
+                            {/* Pay Available */}
+                            <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: r.payAvailable > 0 ? 'var(--text)' : 'var(--text3)' }}>
+                              {r.payAvailable > 0 ? fmt(r.payAvailable) : '—'}
+                            </td>
+
+                            {/* Cash Paid Out — editable */}
+                            <td style={{ textAlign: 'right' }}>
+                              {isEditPayout ? (
+                                <input autoFocus type="number" value={editValue}
+                                  onChange={e => setEditValue(e.target.value)}
+                                  onBlur={() => commitEdit(key, r.month, 'payout')}
+                                  onKeyDown={e => { if (e.key === 'Enter') commitEdit(key, r.month, 'payout'); if (e.key === 'Escape') setEditState(null) }}
+                                  className="pe-input"
+                                  style={{ width: 80, textAlign: 'right', fontSize: 11 }} />
+                              ) : (
+                                <span onClick={() => startEdit(key, r.month, 'payout', r.payout)}
+                                  title="Click to edit"
+                                  style={{ cursor: 'pointer', fontVariantNumeric: 'tabular-nums', borderBottom: '1px dashed var(--border2)', color: r.payout > 0 ? 'var(--red)' : 'var(--text3)' }}>
+                                  {r.payout > 0 ? fmt(r.payout) : '+ add'}
+                                </span>
+                              )}
+                            </td>
+
+                            {/* Balance */}
+                            <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 500, color: r.balance > 0 ? 'var(--amber)' : r.balance < 0 ? 'var(--red)' : 'var(--text3)' }}>
+                              {r.balance !== 0 ? fmt(Math.abs(r.balance)) : '—'}
+                            </td>
+
+                            {/* % Collected */}
+                            <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--text2)' }}>
+                              {r.pctCollected > 0 ? r.pctCollected.toFixed(0) + '%' : '—'}
+                            </td>
+                          </tr>
+                        )
+                      })}
+
+                      {/* Total row */}
+                      {rows.length > 0 && (
+                        <tr style={{ borderTop: '1px solid var(--border2)', fontWeight: 600 }}>
+                          <td>Total</td>
+                          <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: ALLOC_COLORS[key] }}>{fmt(totalRevShare)}</td>
+                          <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{totalDevEarning > 0 ? fmt(totalDevEarning) : '—'}</td>
+                          <td></td>
+                          <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{totalPaidOut > 0 ? fmt(totalPaidOut) : '—'}</td>
+                          <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: currentBalance > 0 ? 'var(--amber)' : 'var(--text3)' }}>{fmt(currentBalance)}</td>
+                          <td></td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
           </div>
         )
