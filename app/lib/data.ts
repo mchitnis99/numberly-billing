@@ -258,6 +258,7 @@ export function parseCSVRow(headers: string[], row: string[]): Partial<Project> 
 
   const client = col('startups')
   if (!client) return null
+  if (!col('month')) return null
 
   const parseAmt = (s: string) => parseFloat(s.replace(/[$,]/g, '')) || 0
   const parsePct = (s: string) => parseFloat(s.replace('%', '')) || 0
