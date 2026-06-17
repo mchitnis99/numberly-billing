@@ -22,12 +22,10 @@ export async function fetchPayouts(): Promise<Payout[]> {
   return data as Payout[]
 }
 
-export async function upsertPayout(p: { id?: number; member: string; month: string; amount: number; note: string }): Promise<Payout> {
-  const { id, ...rest } = p
-  const payload = id ? { id, ...rest } : rest
+export async function upsertPayout({ id: _id, ...rest }: { id?: number; member: string; month: string; amount: number; note: string }): Promise<Payout> {
   const { data, error } = await supabase
     .from('payouts')
-    .upsert(payload, { onConflict: 'member,month' })
+    .upsert(rest, { onConflict: 'member,month' })
     .select()
     .single()
   if (error) throw error
@@ -45,12 +43,10 @@ export async function fetchDevEarnings(): Promise<DevEarning[]> {
   return data as DevEarning[]
 }
 
-export async function upsertDevEarning(d: { id?: number; member: string; month: string; amount: number; note: string }): Promise<DevEarning> {
-  const { id, ...rest } = d
-  const payload = id ? { id, ...rest } : rest
+export async function upsertDevEarning({ id: _id, ...rest }: { id?: number; member: string; month: string; amount: number; note: string }): Promise<DevEarning> {
   const { data, error } = await supabase
     .from('dev_earnings')
-    .upsert(payload, { onConflict: 'member,month' })
+    .upsert(rest, { onConflict: 'member,month' })
     .select()
     .single()
   if (error) throw error
