@@ -231,8 +231,14 @@ export function parseCSVRow(headers: string[], row: string[]): Partial<Project> 
   })
 
   const col = (name: string): string => {
-    const indices = allIdx[name.trim().toLowerCase()]
-    return indices ? (row[indices[0]] || '').trim() : ''
+    const key = name.trim().toLowerCase()
+    // Exact match first; fall back to partial includes, preferring the shortest matching key
+    const exactIdx = allIdx[key]
+    if (exactIdx) return (row[exactIdx[0]] || '').trim()
+    const matches = Object.keys(allIdx).filter(k => k.includes(key))
+    if (matches.length === 0) return ''
+    matches.sort((a, b) => a.length - b.length)
+    return (row[allIdx[matches[0]][0]] || '').trim()
   }
 
   const client = col('startups')
@@ -252,8 +258,8 @@ export function parseCSVRow(headers: string[], row: string[]): Partial<Project> 
   const newrep = col('new') ? 'New' : col('repeat') ? 'Repeat' : 'New'
   const bookedAmt = parseAmt(col('booked amount'))
   const bookedStatus = col('booked amount status')
-  const net = parseAmt(col('total net payment after fees (for allocations)'))
-  const importedBalance = parseAmt(col('balance'))
+  const net = parseAmt(col('total net payment'))
+  const importedBalance = parseAmt(col('remaining billable'))
   const isCsvPaid = (bookedStatus === 'Fully paid' || bookedStatus === 'Partial')
   const invoice: Invoice = {
     num: '', date: '', amt: bookedAmt, due: '', paid: isCsvPaid ? 'imported' : '',
