@@ -292,7 +292,7 @@ export function parseCSVRow(headers: string[], row: string[]): Partial<Project> 
 
   return {
     newrep,
-    month: col('month'),
+    month: col('month').replace(/,/g, '').trim(),
     channel: col('channel'),
     delivery: col('delivery'),
     startup: client,

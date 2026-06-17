@@ -14,7 +14,7 @@ type View = 'all' | 'outstanding' | 'ready' | 'paid' | 'bad-debt' | 'charts' | '
 
 const MONTH_ORDER = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 function monthToNum(m: string): number {
-  const parts = m.trim().split(' ')
+  const parts = m.trim().replace(/,/g, '').split(' ')
   const mon = MONTH_ORDER.indexOf(parts[0])
   const yr = parseInt(parts[1]) || 0
   return yr * 100 + mon
@@ -478,7 +478,7 @@ export default function App() {
                         style={{ cursor: 'pointer' }}
                         title="Mark as ready to bill" />
                     </td>
-                    <td><InlineEdit id={p.id} field="month" value={p.month} /></td>
+                    <td><InlineEdit id={p.id} field="month" value={p.month.replace(/,/g, '').trim()} /></td>
                     <td><InlineEdit id={p.id} field="delivery" value={p.delivery} /></td>
                     <td style={{ fontWeight: 500 }}><InlineEdit id={p.id} field="startup" value={p.startup} /></td>
                     <td><InlineEdit id={p.id} field="soldBy" value={p.soldBy} /></td>
