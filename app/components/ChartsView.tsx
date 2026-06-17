@@ -93,8 +93,6 @@ export function ChartsView({ projects }: { projects: Project[] }) {
   }))
 
   // 2026 bookings by delivery type — stacked bar per month
-  console.log('[chart may26]', projects.filter(p => normalizeMonth(p.month) === 'May 2026').map(p => ({ client: p.startup, delivery: p.delivery, amount: p.amount })))
-
   const KNOWN_DELIVERIES = ['FM', 'FM Update', 'Advisory', 'Pitch Deck', 'BP']
   function normalizeDelivery(raw: string | undefined): string {
     const d = raw?.trim() ?? ''
