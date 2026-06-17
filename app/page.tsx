@@ -7,9 +7,18 @@ import {
 } from './lib/data'
 import { AllocBar } from './components/AllocBar'
 import { ChartsView } from './components/ChartsView'
+import { AllocationsView } from './components/AllocationsView'
 
 type SortKey = 'month' | 'client' | 'amount' | 'balance' | 'status' | 'date' | 'readyForBilling'
-type View = 'all' | 'outstanding' | 'ready' | 'paid' | 'bad-debt' | 'charts'
+type View = 'all' | 'outstanding' | 'ready' | 'paid' | 'bad-debt' | 'charts' | 'allocations'
+
+const MONTH_ORDER = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+function monthToNum(m: string): number {
+  const parts = m.trim().split(' ')
+  const mon = MONTH_ORDER.indexOf(parts[0])
+  const yr = parseInt(parts[1]) || 0
+  return yr * 100 + mon
+}
 
 const emptyInv = (): Invoice => ({ num: '', date: '', amt: 0, due: '', paid: '', net: 0, uwFee: 0, stripeFee: 0, isPaid: false })
 const emptyAlloc = (): Allocation => ({ J: 0, M: 0, N: 0, A: 0, G: 0, S: 0 })
@@ -190,7 +199,7 @@ export default function App() {
   // Sorting
   const sorted = [...filtered].sort((a, b) => {
     let av: string | number = 0, bv: string | number = 0
-    if (sortKey === 'month') { av = new Date(Date.parse(a.month + ' 1')).getTime() || 0; bv = new Date(Date.parse(b.month + ' 1')).getTime() || 0 }
+    if (sortKey === 'month') { av = monthToNum(a.month); bv = monthToNum(b.month) }
     else if (sortKey === 'client') { av = a.startup; bv = b.startup }
     else if (sortKey === 'amount') { av = a.amount; bv = b.amount }
     else if (sortKey === 'balance') { av = remainingBalance(a); bv = remainingBalance(b) }
@@ -374,7 +383,7 @@ export default function App() {
         <div className="nav-inner">
           <span className="nav-brand">Numberly Billing</span>
           <div className="nav-views">
-            {([['all','All'],['outstanding','Outstanding'],['ready','Ready to bill'],['paid','Paid'],['bad-debt','Bad Debt'],['charts','Charts']] as [View,string][]).map(([v,l]) => (
+            {([['all','All'],['outstanding','Outstanding'],['ready','Ready to bill'],['paid','Paid'],['bad-debt','Bad Debt'],['allocations','Allocations'],['charts','Charts']] as [View,string][]).map(([v,l]) => (
               <button key={v} className={`nav-view ${view===v?'active':''}`} onClick={() => setView(v)}>{l}{v==='ready'&&readyCount>0?` (${readyCount})`:''}</button>
             ))}
           </div>
@@ -409,7 +418,7 @@ export default function App() {
           </div>
         )}
 
-        {view !== 'charts' && (
+        {view !== 'charts' && view !== 'allocations' && (
         <div className="toolbar">
           <input type="text" placeholder="Search client, contact, month..." value={search} onChange={e => setSearch(e.target.value)} />
           <span style={{ fontSize: 11, color: 'var(--text3)' }}>{sorted.length} project{sorted.length !== 1 ? 's' : ''}</span>
@@ -417,7 +426,8 @@ export default function App() {
         </div>
         )}
 
-        {view === 'charts' ? <ChartsView projects={projects} /> : (<>
+        {view === 'charts' ? <ChartsView projects={projects} /> :
+         view === 'allocations' ? <AllocationsView projects={projects} /> : (<>
         <div className="scroll-hint">↔ Scroll horizontally to see all columns</div>
         <div className="table-wrap">
           <table>

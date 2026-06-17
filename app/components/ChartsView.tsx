@@ -43,7 +43,7 @@ export function ChartsView({ projects }: { projects: Project[] }) {
   // Annual billings — booked vs collected per year
   const annualMap: Record<string, { Booked: number; Collected: number }> = {}
   projects.forEach(p => {
-    const yr = p.month?.slice(-4)
+    const yr = p.month?.trim().split(' ').pop()
     if (!yr) return
     if (!annualMap[yr]) annualMap[yr] = { Booked: 0, Collected: 0 }
     annualMap[yr].Booked += p.amount
@@ -76,7 +76,7 @@ export function ChartsView({ projects }: { projects: Project[] }) {
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
             <XAxis dataKey="month" angle={-45} textAnchor="end" tick={{ fontSize: 10, fill: 'var(--text2)' }} interval={0} />
             <YAxis tickFormatter={tickFmt} tick={{ fontSize: 10, fill: 'var(--text2)' }} axisLine={false} tickLine={false} />
-            <Tooltip formatter={(v) => [fmt(v as number), 'Booked']} contentStyle={{ backgroundColor: '#1a2744', border: '1px solid #334', borderRadius: 6, fontSize: 12 }} />
+            <Tooltip formatter={(v) => [fmt(v as number), 'Booked']} cursor={{ fill: 'rgba(255,255,255,0.05)' }} contentStyle={{ backgroundColor: '#1a2744', border: '1px solid #2a3a5c', borderRadius: 6, color: '#f0f0ec', fontSize: 12 }} />
             <Bar dataKey="amount" fill="#1D9E75" name="Booked" radius={[3, 3, 0, 0]} />
           </BarChart>
         </ResponsiveContainer>
