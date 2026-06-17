@@ -66,7 +66,6 @@ export function ChartsView({ projects }: { projects: Project[] }) {
     annualMap[yr].Booked += p.amount
     annualMap[yr].Collected += totalNetReceived(p)
   })
-  console.log('[chart] years:', [...new Set(projects.map(p => extractYear(p.month)))])
   const annualData = ['2025', '2026'].map(yr => ({
     year: yr, ...(annualMap[yr] || { Booked: 0, Collected: 0 }),
   }))

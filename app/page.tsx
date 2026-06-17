@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
   Project, Invoice, Allocation, paymentStatus, totalNetReceived, remainingBalance, invoiceNet, fmt, ALLOC_COLORS, parseCSVRow,
   fetchProjects, insertProject, insertProjects, upsertProject, deleteProject as deleteProjectRow,
@@ -184,7 +184,7 @@ export default function App() {
   }
 
   // Filtering
-  const filtered = projects.filter(p => {
+  const filtered = useMemo(() => projects.filter(p => {
     const s = search.toLowerCase()
     const matchSearch = !s || p.startup.toLowerCase().includes(s) || p.contact.toLowerCase().includes(s) || p.month.toLowerCase().includes(s) || p.channel.toLowerCase().includes(s)
     const status = paymentStatus(p)
@@ -194,10 +194,10 @@ export default function App() {
       view === 'paid' ? status === 'Fully paid' :
       view === 'bad-debt' ? p.badDebt : true
     return matchSearch && matchView
-  })
+  }), [projects, view, search])
 
   // Sorting
-  const sorted = [...filtered].sort((a, b) => {
+  const sorted = useMemo(() => [...filtered].sort((a, b) => {
     let av: string | number = 0, bv: string | number = 0
     if (sortKey === 'month') { av = monthToNum(a.month); bv = monthToNum(b.month) }
     else if (sortKey === 'client') { av = a.startup; bv = b.startup }
@@ -209,14 +209,10 @@ export default function App() {
     if (av < bv) return sortDir === 'asc' ? -1 : 1
     if (av > bv) return sortDir === 'asc' ? 1 : -1
     return 0
-  })
+  }), [filtered, sortKey, sortDir])
 
   function toggleSort(k: SortKey) {
-    if (sortKey === k) setSortDir(d => {
-      const next = d === 'asc' ? 'desc' : 'asc'
-      console.log('[sort] key:', k, 'dir:', d, '→', next)
-      return next
-    })
+    if (sortKey === k) setSortDir(d => d === 'asc' ? 'desc' : 'asc')
     else { setSortKey(k); setSortDir('desc') }
   }
 

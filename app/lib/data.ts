@@ -222,7 +222,6 @@ export const ALLOC_COLORS: Record<string, string> = {
 }
 
 // CSV import — maps column headers from the Google Sheet to Project fields
-let _csvDebugLogged = false
 export function parseCSVRow(headers: string[], row: string[]): Partial<Project> | null {
   const allIdx: Record<string, number[]> = {}
   headers.forEach((h, i) => {
@@ -279,11 +278,6 @@ export function parseCSVRow(headers: string[], row: string[]): Partial<Project> 
   const invStripeFee = parseAmt(colN('stripe/upwork fee', 0)) + parseAmt(colN('stripe/upwork fee', 1)) + parseAmt(colN('stripe/upwork fee', 2))
   // An invoice counts as paid if any payment has been made (balance < booked amount)
   const isCsvPaid = bookedAmt > 0 && balance < bookedAmt
-
-  if (!_csvDebugLogged) {
-    _csvDebugLogged = true
-    console.log('[csv] bookedAmt:', bookedAmt, 'balance:', balance, 'inv.net:', invNet, 'isPaid:', isCsvPaid)
-  }
 
   const invoice: Invoice = {
     num: '', date: '', amt: bookedAmt, due: '', paid: isCsvPaid ? 'imported' : '',
