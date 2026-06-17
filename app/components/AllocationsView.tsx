@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { Project, totalNetReceived, fmt, ALLOC_COLORS } from '../lib/data'
-import { Payout, DevEarning, fetchPayouts, fetchDevEarnings, upsertPayout, upsertDevEarning } from '../lib/payouts'
+import { Payout, DevEarning, fetchPayouts, fetchDevEarnings, upsertPayout, upsertDevEarning, bulkUpsertPayouts, bulkUpsertDevEarnings } from '../lib/payouts'
 
 const MONTH_ORDER = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
@@ -32,6 +32,99 @@ function normalizeMonth(m: string): string {
   return MONTH_ORDER[mon] + ' ' + fullYr
 }
 
+// Character-by-character CSV parser — handles quoted multiline fields
+function parseCSV(text: string): string[][] {
+  const rows: string[][] = []
+  let cur = '', inQuotes = false, fields: string[] = []
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i], next = text[i + 1]
+    if (ch === '"') {
+      if (inQuotes && next === '"') { cur += '"'; i++ }
+      else inQuotes = !inQuotes
+    } else if (ch === ',' && !inQuotes) {
+      fields.push(cur.trim()); cur = ''
+    } else if ((ch === '\n' || ch === '\r') && !inQuotes) {
+      if (ch === '\r' && next === '\n') i++
+      fields.push(cur.trim()); cur = ''
+      if (fields.some(f => f !== '')) rows.push(fields)
+      fields = []
+    } else { cur += ch }
+  }
+  if (fields.length || cur) { fields.push(cur.trim()); if (fields.some(f => f !== '')) rows.push(fields) }
+  return rows
+}
+
+function parseAmount(s: string): number {
+  if (!s || s.trim() === '-' || s.trim() === '') return 0
+  const isNeg = s.startsWith('(') && s.endsWith(')')
+  const cleaned = s.replace(/[()$\s]/g, '').replace(/,/g, '')
+  const val = parseFloat(cleaned) || 0
+  return isNeg ? -val : val
+}
+
+const MEMBER_MAP: Record<string, MemberKey> = {
+  john: 'J', monica: 'M', altion: 'A', gaby: 'G', numberly: 'N',
+}
+
+const JAN_2025 = 2025 * 100 + 0  // monthToNum('Jan 2025')
+
+function parseAllocationsCSV(text: string): { payouts: Omit<Payout, 'id'>[]; devEarnings: Omit<DevEarning, 'id'>[] } {
+  const rows = parseCSV(text)
+  if (rows.length < 2) return { payouts: [], devEarnings: [] }
+
+  // Row at index 1 contains months starting at column 3
+  const headerRow = rows[1]
+  const monthCols: (string | null)[] = headerRow.map((cell, i) => {
+    if (i < 3) return null
+    const val = cell.trim()
+    if (!val) return null
+    const lower = val.toLowerCase()
+    if (lower.includes('total') || lower.includes('last 12')) return null
+    const normalized = normalizeMonth(val)
+    if (monthToNum(normalized) < JAN_2025) return null
+    return normalized
+  })
+
+  const rawPayouts: { member: string; month: string; amount: number }[] = []
+  const rawDevEarnings: { member: string; month: string; amount: number }[] = []
+  let currentMember: MemberKey | null = null
+
+  for (let i = 2; i < rows.length; i++) {
+    const row = rows[i]
+    const colB = (row[1] || '').trim()
+    const memberKey = MEMBER_MAP[colB.toLowerCase()]
+    if (memberKey) { currentMember = memberKey; continue }
+    if (!currentMember) continue
+
+    const label = colB.toLowerCase()
+    let rowType: 'dev' | 'payout' | null = null
+    if (label.includes('development earnings') || label.includes('other earnings')) rowType = 'dev'
+    else if (label.includes('cash paid out')) rowType = 'payout'
+    if (!rowType) continue
+
+    monthCols.forEach((month, colIdx) => {
+      if (!month) return
+      const amount = parseAmount(row[colIdx] || '')
+      if (amount === 0) return
+      if (rowType === 'dev') rawDevEarnings.push({ member: currentMember!, month, amount })
+      else rawPayouts.push({ member: currentMember!, month, amount })
+    })
+  }
+
+  // Aggregate: sum multiple rows (e.g. Dev Earnings + Other Earnings) for same member+month
+  function aggregate<T extends { member: string; month: string; amount: number }>(items: T[]): Omit<Payout, 'id'>[] {
+    const map: Record<string, { member: string; month: string; amount: number; note: string }> = {}
+    items.forEach(({ member, month, amount }) => {
+      const k = `${member}|${month}`
+      if (!map[k]) map[k] = { member, month, amount, note: '' }
+      else map[k].amount += amount
+    })
+    return Object.values(map)
+  }
+
+  return { payouts: aggregate(rawPayouts), devEarnings: aggregate(rawDevEarnings) }
+}
+
 type MemberKey = 'J' | 'M' | 'N' | 'A' | 'G'
 const MEMBERS: { key: MemberKey; name: string }[] = [
   { key: 'J', name: 'John' },
@@ -49,6 +142,8 @@ export function AllocationsView({ projects }: { projects: Project[] }) {
   const [collapsed, setCollapsed] = useState<Set<MemberKey>>(new Set())
   const [editState, setEditState] = useState<EditState>(null)
   const [editValue, setEditValue] = useState('')
+  const [importMsg, setImportMsg] = useState('')
+  const fileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     fetchPayouts().then(setPayouts).catch(console.error)
@@ -117,6 +212,30 @@ export function AllocationsView({ projects }: { projects: Project[] }) {
     setEditValue(current > 0 ? String(current) : '')
   }
 
+  async function handleAllocCSV(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (fileRef.current) fileRef.current.value = ''
+    const text = await file.text()
+    const { payouts: newPayouts, devEarnings: newEarnings } = parseAllocationsCSV(text)
+    if (newPayouts.length === 0 && newEarnings.length === 0) {
+      setImportMsg('No data found — check CSV format.')
+      return
+    }
+    try {
+      await Promise.all([
+        bulkUpsertPayouts(newPayouts),
+        bulkUpsertDevEarnings(newEarnings),
+      ])
+      const [updatedPayouts, updatedEarnings] = await Promise.all([fetchPayouts(), fetchDevEarnings()])
+      setPayouts(updatedPayouts)
+      setDevEarnings(updatedEarnings)
+      setImportMsg(`Imported ${newPayouts.length} payout${newPayouts.length !== 1 ? 's' : ''}, ${newEarnings.length} dev earning${newEarnings.length !== 1 ? 's' : ''}.`)
+    } catch (err) {
+      setImportMsg(`Import failed: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
   function toggleCollapse(key: MemberKey) {
     setCollapsed(prev => {
       const next = new Set(prev)
@@ -127,6 +246,13 @@ export function AllocationsView({ projects }: { projects: Project[] }) {
 
   return (
     <div style={{ padding: '1.5rem 0', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+
+      {/* Import toolbar */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <input ref={fileRef} type="file" accept=".csv" onChange={handleAllocCSV} style={{ display: 'none' }} />
+        <button className="btn" onClick={() => { setImportMsg(''); fileRef.current?.click() }}>⬆ Import Allocations CSV</button>
+        {importMsg && <span style={{ fontSize: 12, color: importMsg.startsWith('Import failed') ? 'var(--red)' : 'var(--green)' }}>{importMsg}</span>}
+      </div>
 
       {/* Summary cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8 }}>
