@@ -11,7 +11,7 @@ import { ChartsView } from './components/ChartsView'
 type SortKey = 'month' | 'client' | 'amount' | 'balance' | 'status' | 'date' | 'readyForBilling'
 type View = 'all' | 'outstanding' | 'ready' | 'paid' | 'bad-debt' | 'charts'
 
-const emptyInv = (): Invoice => ({ num: '', date: '', amt: 0, due: '', paid: '', net: 0, uwFee: 0, stripeFee: 0 })
+const emptyInv = (): Invoice => ({ num: '', date: '', amt: 0, due: '', paid: '', net: 0, uwFee: 0, stripeFee: 0, isPaid: false })
 const emptyAlloc = (): Allocation => ({ J: 0, M: 0, N: 0, A: 0, G: 0, S: 0 })
 
 function emptyProject(id: number): Project {
@@ -75,6 +75,10 @@ export default function App() {
         invs[i] = { ...invs[i], [key]: numericKeys.includes(key) ? +(value as string) || 0 : value }
         if (key === 'amt' || key === 'uwFee' || key === 'stripeFee') {
           invs[i].net = Math.max(0, invs[i].amt - invs[i].uwFee - invs[i].stripeFee)
+        }
+        // Auto-set isPaid when a payment date is entered or cleared
+        if (key === 'paid') {
+          invs[i].isPaid = !!(value as string)
         }
         return { ...p, invoices: invs }
       }
@@ -623,11 +627,10 @@ export default function App() {
                     </div>
                   </div>
                   {inv && (() => {
-                    const isPaid = !!(inv.paid) || invoiceNet(inv) > 0
                     const paidLabel = inv.paid && inv.paid !== 'imported' ? `Paid ${inv.paid}` : 'Paid'
                     return (
                       <div style={{ fontSize: 11, color: 'var(--text2)', marginTop: 6 }}>
-                        Status: <span className={isPaid ? 'paid-yes' : 'paid-no'}>{isPaid ? paidLabel : 'Unpaid'}</span>
+                        Status: <span className={inv.isPaid ? 'paid-yes' : 'paid-no'}>{inv.isPaid ? paidLabel : 'Unpaid'}</span>
                       </div>
                     )
                   })()}
