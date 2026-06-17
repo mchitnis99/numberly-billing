@@ -76,20 +76,21 @@ export function AllocationsView({ projects }: { projects: Project[] }) {
     let running = openingBalance
     const rows = allMonths.map(month => {
       const ps = projects.filter(p => normalizeMonth(p.month) === month)
-      const revShare = ps.reduce((s, p) => s + totalNetReceived(p) * (p.alloc[key] || 0) / 100, 0)
-      const bookedAlloc = ps.reduce((s, p) => s + p.amount * (p.alloc[key] || 0) / 100, 0)
+      const revShare = ps.reduce((s, p) => s + p.amount * (p.alloc[key] || 0) / 100, 0)
+      const cashEarned = ps.reduce((s, p) => s + totalNetReceived(p) * (p.alloc[key] || 0) / 100, 0)
       const devEarning = devEarnings.find(d => d.member === key && d.month === month)?.amount || 0
       const payout = payouts.find(p => p.member === key && p.month === month)?.amount || 0
-      const payAvailable = running + revShare + devEarning
+      const payAvailable = running + cashEarned + devEarning
       const balance = payAvailable - payout
-      const pctCollected = bookedAlloc > 0 ? revShare / bookedAlloc * 100 : 0
+      const pctCollected = revShare > 0 ? cashEarned / revShare * 100 : 0
       running = balance
-      return { month, revShare, bookedAlloc, devEarning, payout, payAvailable, balance, pctCollected }
+      return { month, revShare, cashEarned, devEarning, payout, payAvailable, balance, pctCollected }
     })
     const totalRevShare = rows.reduce((s, r) => s + r.revShare, 0)
+    const totalCashEarned = rows.reduce((s, r) => s + r.cashEarned, 0)
     const totalPaidOut = rows.reduce((s, r) => s + r.payout, 0)
     const currentBalance = rows.length > 0 ? rows[rows.length - 1].balance : openingBalance
-    return { key, name, rows, openingBalance, totalRevShare, totalPaidOut, currentBalance }
+    return { key, name, rows, openingBalance, totalRevShare, totalCashEarned, totalPaidOut, currentBalance }
   }), [projects, payouts, devEarnings, allMonths])
 
   async function commitEdit(member: MemberKey, month: string, field: 'payout' | 'dev') {
@@ -129,18 +130,19 @@ export function AllocationsView({ projects }: { projects: Project[] }) {
 
       {/* Summary cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
-        {memberData.map(({ key, name, currentBalance, totalRevShare, totalPaidOut }) => (
+        {memberData.map(({ key, name, currentBalance, totalRevShare, totalCashEarned, totalPaidOut }) => (
           <div key={key} style={{ background: 'var(--surface2)', borderRadius: 'var(--radius)', padding: '0.75rem 1rem', border: '0.5px solid var(--border)' }}>
             <div style={{ fontSize: 10, color: ALLOC_COLORS[key], textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600, marginBottom: 4 }}>{name}</div>
             <div style={{ fontSize: 17, fontWeight: 600, marginBottom: 1 }}>{fmt(currentBalance)}</div>
             <div style={{ fontSize: 10, color: 'var(--text3)', marginBottom: 4 }}>balance</div>
-            <div style={{ fontSize: 10, color: 'var(--text2)' }}>{fmt(totalRevShare)} earned · {fmt(totalPaidOut)} paid</div>
+            <div style={{ fontSize: 10, color: 'var(--text2)' }}>{fmt(totalRevShare)} booked · {fmt(totalCashEarned)} collected</div>
+            <div style={{ fontSize: 10, color: 'var(--text2)' }}>{fmt(totalPaidOut)} paid out</div>
           </div>
         ))}
       </div>
 
       {/* Per-member ledger */}
-      {memberData.map(({ key, name, rows, openingBalance, totalRevShare, totalPaidOut, currentBalance }) => {
+      {memberData.map(({ key, name, rows, openingBalance, totalRevShare, totalCashEarned, totalPaidOut, currentBalance }) => {
         const isCollapsed = collapsed.has(key)
         const totalDevEarning = rows.reduce((s, r) => s + r.devEarning, 0)
         const isEditOpening = editState?.member === key && editState?.month === 'Opening' && editState?.field === 'payout'
@@ -157,7 +159,7 @@ export function AllocationsView({ projects }: { projects: Project[] }) {
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <span style={{ fontSize: 12, fontWeight: 700, color: ALLOC_COLORS[key], textTransform: 'uppercase', letterSpacing: '0.06em' }}>{name}</span>
                 <span style={{ fontSize: 11, color: 'var(--text2)' }}>
-                  {fmt(totalRevShare)} earned &nbsp;·&nbsp; {fmt(totalPaidOut)} paid
+                  {fmt(totalRevShare)} booked &nbsp;·&nbsp; {fmt(totalCashEarned)} collected &nbsp;·&nbsp; {fmt(totalPaidOut)} paid
                   &nbsp;·&nbsp; <span style={{ color: currentBalance > 0 ? 'var(--amber)' : 'var(--text3)', fontWeight: 500 }}>{fmt(currentBalance)} balance</span>
                 </span>
               </div>
@@ -210,6 +212,7 @@ export function AllocationsView({ projects }: { projects: Project[] }) {
                       <tr>
                         <th>Month</th>
                         <th style={{ textAlign: 'right' }}>Rev Share</th>
+                        <th style={{ textAlign: 'right' }}>Cash Earned</th>
                         <th style={{ textAlign: 'right' }}>Dev Earnings</th>
                         <th style={{ textAlign: 'right' }}>Pay Available</th>
                         <th style={{ textAlign: 'right' }}>Cash Paid Out</th>
@@ -225,9 +228,14 @@ export function AllocationsView({ projects }: { projects: Project[] }) {
                           <tr key={r.month}>
                             <td style={{ fontWeight: 500 }}>{r.month}</td>
 
-                            {/* Rev Share */}
-                            <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: r.revShare > 0 ? ALLOC_COLORS[key] : 'var(--text3)' }}>
+                            {/* Rev Share — booked */}
+                            <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: r.revShare > 0 ? 'var(--text2)' : 'var(--text3)' }}>
                               {r.revShare > 0 ? fmt(r.revShare) : '—'}
+                            </td>
+
+                            {/* Cash Earned — collected */}
+                            <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: r.cashEarned > 0 ? ALLOC_COLORS[key] : 'var(--text3)' }}>
+                              {r.cashEarned > 0 ? fmt(r.cashEarned) : '—'}
                             </td>
 
                             {/* Dev Earnings — editable */}
@@ -288,7 +296,8 @@ export function AllocationsView({ projects }: { projects: Project[] }) {
                       {rows.length > 0 && (
                         <tr style={{ borderTop: '1px solid var(--border2)', fontWeight: 600 }}>
                           <td>Total</td>
-                          <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: ALLOC_COLORS[key] }}>{fmt(totalRevShare)}</td>
+                          <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--text2)' }}>{fmt(totalRevShare)}</td>
+                          <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: ALLOC_COLORS[key] }}>{fmt(totalCashEarned)}</td>
                           <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{totalDevEarning > 0 ? fmt(totalDevEarning) : '—'}</td>
                           <td></td>
                           <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{totalPaidOut > 0 ? fmt(totalPaidOut) : '—'}</td>
