@@ -72,6 +72,17 @@ function parseAllocationsCSV(text: string): { payouts: Omit<Payout, 'id'>[]; dev
   const rows = parseCSV(text)
   if (rows.length < 2) return { payouts: [], devEarnings: [] }
 
+  // Normalize month header cells: handles "Jan-25", "Jan 2025", "Jan-2025"
+  const normalizeHeaderMonth = (m: string): string => {
+    const s = m.trim()
+    const dashMatch = s.match(/^([A-Za-z]+)-(\d{2})$/)
+    if (dashMatch) {
+      const yr = parseInt(dashMatch[2])
+      return dashMatch[1] + ' ' + (yr <= 50 ? 2000 + yr : 1900 + yr)
+    }
+    return normalizeMonth(s)  // fall back to full parser for "Jan 2025", "Jan-2025", etc.
+  }
+
   // Row at index 1 contains months starting at column 3
   const headerRow = rows[1]
   const monthCols: (string | null)[] = headerRow.map((cell, i) => {
@@ -80,7 +91,7 @@ function parseAllocationsCSV(text: string): { payouts: Omit<Payout, 'id'>[]; dev
     if (!val) return null
     const lower = val.toLowerCase()
     if (lower.includes('total') || lower.includes('last 12')) return null
-    const normalized = normalizeMonth(val)
+    const normalized = normalizeHeaderMonth(val)
     if (monthToNum(normalized) < JAN_2025) return null
     return normalized
   })
