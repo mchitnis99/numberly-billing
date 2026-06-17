@@ -92,15 +92,25 @@ export function ChartsView({ projects }: { projects: Project[] }) {
     year: yr, ...(annualMap[yr] || { Booked: 0, Collected: 0 }),
   }))
 
-  // 2026 billings by delivery type — stacked bar per month
+  // 2026 bookings by delivery type — stacked bar per month
+  console.log('[chart may26]', projects.filter(p => normalizeMonth(p.month) === 'May 2026').map(p => ({ client: p.startup, delivery: p.delivery, amount: p.amount })))
+
+  const KNOWN_DELIVERIES = ['FM', 'FM Update', 'Advisory', 'Pitch Deck', 'BP']
+  function normalizeDelivery(raw: string | undefined): string {
+    const d = raw?.trim() ?? ''
+    if (d === 'PD') return 'Pitch Deck'
+    if (KNOWN_DELIVERIES.includes(d)) return d
+    return 'Other'
+  }
+
   const projects2026 = projects.filter(p => extractYear(p.month) === '2026')
-  const deliveries = [...new Set(projects2026.map(p => p.delivery?.trim()))].filter(Boolean).sort()
+  const deliveries = [...new Set(projects2026.map(p => normalizeDelivery(p.delivery)))].filter(Boolean).sort()
   const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
   const deliveryData = MONTHS.map(m => {
     const month = m + ' 2026'
     const row: Record<string, string | number> = { month: m }
     deliveries.forEach(d => {
-      row[d] = projects.filter(p => normalizeMonth(p.month) === month && p.delivery?.trim() === d).reduce((s, p) => s + p.amount, 0)
+      row[d] = projects.filter(p => normalizeMonth(p.month) === month && normalizeDelivery(p.delivery) === d).reduce((s, p) => s + p.amount, 0)
     })
     return row
   })
