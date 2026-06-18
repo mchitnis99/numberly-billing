@@ -282,7 +282,7 @@ export function parseCSVRow(headers: string[], row: string[]): Partial<Project> 
   // An invoice counts as paid if any payment has been made (balance < booked amount)
   const isCsvPaid = bookedAmt > 0 && balance < bookedAmt
 
-  console.log('[csv import]', client, 'net:', invNet, 'balance:', balance, 'paid:', isCsvPaid)
+  console.log('[net] client:', client, 'inv.net:', invNet, 'booked:', bookedAmt)
 
   const invoice: Invoice = {
     num: '', date: '', amt: bookedAmt, due: '', paid: isCsvPaid ? 'imported' : '',
@@ -294,10 +294,11 @@ export function parseCSVRow(headers: string[], row: string[]): Partial<Project> 
     month: (() => {
       const raw = col('month').replace(/,/g, '').trim()
       const MONTH_ORDER = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
-      const dash = raw.match(/^([A-Za-z]+)-(\d{2,4})$/)
+      // Exactly 3-letter month abbreviation + dash + exactly 2-digit year (e.g. "Jan-25")
+      const dash = raw.match(/^([A-Za-z]{3})-(\d{2})$/)
       if (dash) {
         const yr = parseInt(dash[2])
-        const fullYr = yr < 100 ? (yr > 50 ? 1900 + yr : 2000 + yr) : yr
+        const fullYr = yr > 50 ? 1900 + yr : 2000 + yr
         return dash[1] + ' ' + fullYr
       }
       const space = raw.match(/^([A-Za-z]+)\s+(\d{2,4})$/)
