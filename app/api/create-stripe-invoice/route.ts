@@ -4,7 +4,7 @@ import Stripe from 'stripe'
 export async function POST(req: NextRequest) {
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!)
   const { clientEmail, clientName, amount, description } = await req.json()
-  console.log('[stripe] clientName:', clientName)
+  console.log('[stripe] received:', { clientEmail, clientName, amount })
 
   if (!clientEmail || !amount) {
     return NextResponse.json({ error: 'clientEmail and amount are required' }, { status: 400 })
@@ -12,9 +12,12 @@ export async function POST(req: NextRequest) {
 
   // Find or create customer
   const existing = await stripe.customers.list({ email: clientEmail, limit: 1 })
-  const customer = existing.data.length > 0
+  let customer = existing.data.length > 0
     ? existing.data[0]
     : await stripe.customers.create({ email: clientEmail, name: clientName || undefined })
+  if (existing.data.length > 0 && !customer.name && clientName) {
+    customer = await stripe.customers.update(customer.id, { name: clientName })
+  }
 
   // Create draft invoice with description as memo
   const invoice = await stripe.invoices.create({

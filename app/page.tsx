@@ -690,7 +690,7 @@ export default function App() {
                           headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({
                             clientEmail: detail.email,
-                            clientName: detail.contact,
+                            clientName: detail.contact || detail.upworkName || detail.startup,
                             amount: detail.amount,
                             description: detail.description || `${detail.startup} - ${detail.delivery} - ${detail.month}`,
                           }),
