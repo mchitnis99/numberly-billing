@@ -13,6 +13,13 @@ type SortKey = 'month' | 'client' | 'amount' | 'balance' | 'status' | 'date' | '
 type View = 'all' | 'outstanding' | 'ready' | 'paid' | 'bad-debt' | 'charts' | 'allocations'
 
 const MONTH_ORDER = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
+const MONTH_OPTIONS: string[] = []
+for (let yr = 2025; yr <= 2027; yr++) {
+  for (let mo = 0; mo < 12; mo++) {
+    const d = new Date(yr, mo, 1)
+    MONTH_OPTIONS.push(d.toLocaleString('en-US', { month: 'short' }) + ' ' + yr)
+  }
+}
 function monthToNum(m: string): number {
   const cleaned = m.replace(/,/g, '').trim()
   const dashMatch = cleaned.match(/^([A-Za-z]+)-(\d{2,4})$/)
@@ -562,7 +569,7 @@ export default function App() {
                         style={{ cursor: 'pointer' }}
                         title="Mark as ready to bill" />
                     </td>
-                    <td><InlineEdit id={p.id} field="month" value={p.month.replace(/,/g, '').trim()} /></td>
+                    <td><InlineEdit id={p.id} field="month" value={p.month.replace(/,/g, '').trim()} options={MONTH_OPTIONS} /></td>
                     <td><InlineEdit id={p.id} field="delivery" value={p.delivery} options={['FM','FM Update','PD','BP','Advisory','Bookkeeping']} /></td>
                     <td style={{ fontWeight: 500 }}><InlineEdit id={p.id} field="startup" value={p.startup} /></td>
                     <td><InlineEdit id={p.id} field="soldBy" value={p.soldBy} /></td>
@@ -621,7 +628,7 @@ export default function App() {
             <div className="panel-edit">
               {([
                 ['Client / startup', 'startup', 'text'],
-                ['Month', 'month', 'text'],
+                ['Month', 'month', 'select', MONTH_OPTIONS],
                 ['New / Repeat', 'newrep', 'select', ['New','Repeat']],
                 ['Channel', 'channel', 'select', ['UW','Repeat','Referral','Website']],
                 ['Delivery type', 'delivery', 'select', ['FM','FM Update','PD','BP','Advisory','Bookkeeping']],
