@@ -224,7 +224,7 @@ export function numberlyShare(p: Project): number {
 }
 
 export function fmt(n: number): string {
-  return '$' + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  return '$' + Math.round(n).toLocaleString('en-US')
 }
 
 export const ALLOC_COLORS: Record<string, string> = {
