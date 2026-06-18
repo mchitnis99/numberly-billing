@@ -563,7 +563,7 @@ export default function App() {
                         title="Mark as ready to bill" />
                     </td>
                     <td><InlineEdit id={p.id} field="month" value={p.month.replace(/,/g, '').trim()} /></td>
-                    <td><InlineEdit id={p.id} field="delivery" value={p.delivery} /></td>
+                    <td><InlineEdit id={p.id} field="delivery" value={p.delivery} options={['FM','FM Update','PD','BP','Advisory','Bookkeeping']} /></td>
                     <td style={{ fontWeight: 500 }}><InlineEdit id={p.id} field="startup" value={p.startup} /></td>
                     <td><InlineEdit id={p.id} field="soldBy" value={p.soldBy} /></td>
                     <td><InlineEdit id={p.id} field="contact" value={p.contact} /></td>
@@ -624,7 +624,7 @@ export default function App() {
                 ['Month', 'month', 'text'],
                 ['New / Repeat', 'newrep', 'select', ['New','Repeat']],
                 ['Channel', 'channel', 'select', ['UW','Repeat','Referral','Website']],
-                ['Delivery type', 'delivery', 'text'],
+                ['Delivery type', 'delivery', 'select', ['FM','FM Update','PD','BP','Advisory','Bookkeeping']],
                 ['Sold by', 'soldBy', 'text'],
                 ['Contact', 'contact', 'text'],
                 ['Email', 'email', 'text'],
