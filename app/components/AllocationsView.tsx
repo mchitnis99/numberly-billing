@@ -34,11 +34,10 @@ function normalizeMonth(m: string): string {
 
 const JUL_2026 = 2026 * 100 + 6
 
-type MemberKey = 'J' | 'M' | 'A' | 'G'
+type MemberKey = 'J' | 'M' | 'G'
 const MEMBERS: { key: MemberKey; name: string }[] = [
   { key: 'J', name: 'John' },
   { key: 'M', name: 'Monica' },
-  { key: 'A', name: 'Altion' },
   { key: 'G', name: 'Gaby' },
 ]
 
@@ -133,14 +132,14 @@ export function AllocationsView({ projects }: { projects: Project[] }) {
     <div style={{ padding: '1.5rem 0', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
 
       {/* Summary cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
         {memberData.map(({ key, name, currentBalance, totalSales, totalRevShare, totalCashEarned, totalPaidOut }) => (
           <div key={key} style={{ background: 'var(--surface2)', borderRadius: 'var(--radius)', padding: '0.75rem 1rem', border: '0.5px solid var(--border)' }}>
             <div style={{ fontSize: 10, color: ALLOC_COLORS[key], textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600, marginBottom: 4 }}>{name}</div>
             <div style={{ fontSize: 17, fontWeight: 600, marginBottom: 1 }}>{fmt(currentBalance)}</div>
             <div style={{ fontSize: 10, color: 'var(--text3)', marginBottom: 4 }}>balance</div>
-            <div style={{ fontSize: 10, color: 'var(--text2)' }}>{fmt(totalSales)} sold · {fmt(totalRevShare)} booked · {fmt(totalCashEarned)} collected</div>
-            <div style={{ fontSize: 10, color: 'var(--text2)' }}>{fmt(totalPaidOut)} paid out</div>
+            <div style={{ fontSize: 10, color: 'var(--text2)' }}>{fmt(totalSales)} Sales · {fmt(totalRevShare)} Rev Share · {fmt(totalCashEarned)} Cash Earned</div>
+            <div style={{ fontSize: 10, color: 'var(--text2)' }}>{fmt(totalPaidOut)} Paid Out</div>
           </div>
         ))}
       </div>
@@ -163,7 +162,7 @@ export function AllocationsView({ projects }: { projects: Project[] }) {
               <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                 <span style={{ fontSize: 12, fontWeight: 700, color: ALLOC_COLORS[key], textTransform: 'uppercase', letterSpacing: '0.06em' }}>{name}</span>
                 <span style={{ fontSize: 11, color: 'var(--text2)' }}>
-                  {fmt(totalSales)} sold &nbsp;·&nbsp; {fmt(totalRevShare)} booked &nbsp;·&nbsp; {fmt(totalCashEarned)} collected &nbsp;·&nbsp; {fmt(totalPaidOut)} paid
+                  {fmt(totalSales)} Sales &nbsp;·&nbsp; {fmt(totalRevShare)} Rev Share &nbsp;·&nbsp; {fmt(totalCashEarned)} Cash Earned &nbsp;·&nbsp; {fmt(totalPaidOut)} Paid Out
                   &nbsp;·&nbsp; <span style={{ color: currentBalance > 0 ? 'var(--amber)' : 'var(--text3)', fontWeight: 500 }}>{fmt(currentBalance)} balance</span>
                 </span>
               </div>
