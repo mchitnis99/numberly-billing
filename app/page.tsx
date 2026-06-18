@@ -398,7 +398,7 @@ export default function App() {
         <div className="nav-inner">
           <span className="nav-brand">Numberly Billing</span>
           <div className="nav-views">
-            {([['all','All'],['outstanding','Outstanding'],['ready','Ready to bill'],['paid','Paid'],['bad-debt','Bad Debt'],['allocations','Allocations'],['charts','Charts']] as [View,string][]).map(([v,l]) => (
+            {([['charts','Charts'],['all','All'],['outstanding','Outstanding'],['ready','Ready to bill'],['paid','Paid'],['bad-debt','Bad Debt'],['allocations','Allocations']] as [View,string][]).map(([v,l]) => (
               <button key={v} className={`nav-view ${view===v?'active':''}`} onClick={() => setView(v)}>{l}{v==='ready'&&readyCount>0?` (${readyCount})`:''}</button>
             ))}
           </div>

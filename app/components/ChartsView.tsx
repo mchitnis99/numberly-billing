@@ -41,13 +41,14 @@ function extractYear(m: string): string {
 }
 
 const DELIVERY_COLORS: Record<string, string> = {
-  'FM': '#1D9E75',
-  'FM Update': '#534AB7',
-  'Advisory': '#D85A30',
-  'Intro': '#D4537E',
-  'Webinar': '#378ADD',
+  'FM':         '#1D9E75',
+  'FM Update':  '#378ADD',
+  'Advisory':   '#D85A30',
+  'Pitch Deck': '#534AB7',
+  'BP':         '#D4537E',
+  'Other':      '#888780',
 }
-const FALLBACK_COLORS = ['#1D9E75', '#534AB7', '#D85A30', '#D4537E', '#378ADD', '#BA7517', '#888780']
+const FALLBACK_COLORS = ['#1D9E75', '#378ADD', '#D85A30', '#534AB7', '#D4537E', '#888780', '#BA7517']
 
 const tickFmt = (v: number) => v >= 1000 ? '$' + (v / 1000).toFixed(0) + 'k' : '$' + v
 

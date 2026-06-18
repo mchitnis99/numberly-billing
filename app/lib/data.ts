@@ -277,14 +277,16 @@ export function parseCSVRow(headers: string[], row: string[]): Partial<Project> 
   const bookedAmt = parseAmt(col('booked amount'))
   const bookedStatus = col('booked amount status')
   const balance = parseAmt(col('balance'))
-  const invNet = parseAmt(colN('total payment', 0)) + parseAmt(colN('total payment', 1)) + parseAmt(colN('total payment', 2))
-  const invStripeFee = parseAmt(colN('stripe/upwork fee', 0)) + parseAmt(colN('stripe/upwork fee', 1)) + parseAmt(colN('stripe/upwork fee', 2))
+  // Column BA — already has platform fees deducted; use directly instead of summing gross payment cols
+  const invNet = parseAmt(col('total net payment after fees'))
   // An invoice counts as paid if any payment has been made (balance < booked amount)
   const isCsvPaid = bookedAmt > 0 && balance < bookedAmt
 
+  console.log('[csv import]', client, 'net:', invNet, 'balance:', balance, 'paid:', isCsvPaid)
+
   const invoice: Invoice = {
     num: '', date: '', amt: bookedAmt, due: '', paid: isCsvPaid ? 'imported' : '',
-    net: invNet, uwFee: 0, stripeFee: invStripeFee, isPaid: isCsvPaid,
+    net: invNet, uwFee: 0, stripeFee: 0, isPaid: isCsvPaid,
   }
 
   return {

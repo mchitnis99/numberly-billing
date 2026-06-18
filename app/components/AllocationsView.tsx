@@ -215,12 +215,12 @@ export function AllocationsView({ projects }: { projects: Project[] }) {
                         <th>Month</th>
                         <th style={{ textAlign: 'right' }}>Sales</th>
                         <th style={{ textAlign: 'right' }}>Rev Share</th>
+                        <th style={{ textAlign: 'right' }}>% Collected</th>
                         <th style={{ textAlign: 'right' }}>Cash Earned</th>
                         <th style={{ textAlign: 'right' }}>Dev Earnings</th>
                         <th style={{ textAlign: 'right' }}>Pay Available</th>
                         <th style={{ textAlign: 'right' }}>Cash Paid Out</th>
                         <th style={{ textAlign: 'right' }}>Balance</th>
-                        <th style={{ textAlign: 'right' }}>% Collected</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -239,6 +239,11 @@ export function AllocationsView({ projects }: { projects: Project[] }) {
                             {/* Rev Share — booked */}
                             <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: r.revShare > 0 ? 'var(--text2)' : 'var(--text3)' }}>
                               {r.revShare > 0 ? fmt(r.revShare) : '—'}
+                            </td>
+
+                            {/* % Collected */}
+                            <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--text2)' }}>
+                              {r.pctCollected > 0 ? r.pctCollected.toFixed(0) + '%' : '—'}
                             </td>
 
                             {/* Cash Earned — collected */}
@@ -291,11 +296,6 @@ export function AllocationsView({ projects }: { projects: Project[] }) {
                             <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 500, color: r.balance > 0 ? 'var(--amber)' : r.balance < 0 ? 'var(--red)' : 'var(--text3)' }}>
                               {r.balance !== 0 ? fmt(Math.abs(r.balance)) : '—'}
                             </td>
-
-                            {/* % Collected */}
-                            <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--text2)' }}>
-                              {r.pctCollected > 0 ? r.pctCollected.toFixed(0) + '%' : '—'}
-                            </td>
                           </tr>
                         )
                       })}
@@ -306,12 +306,12 @@ export function AllocationsView({ projects }: { projects: Project[] }) {
                           <td>Total</td>
                           <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{totalSales > 0 ? fmt(totalSales) : '—'}</td>
                           <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--text2)' }}>{fmt(totalRevShare)}</td>
+                          <td></td>
                           <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: ALLOC_COLORS[key] }}>{fmt(totalCashEarned)}</td>
                           <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{totalDevEarning > 0 ? fmt(totalDevEarning) : '—'}</td>
                           <td></td>
                           <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{totalPaidOut > 0 ? fmt(totalPaidOut) : '—'}</td>
                           <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: currentBalance > 0 ? 'var(--amber)' : 'var(--text3)' }}>{fmt(currentBalance)}</td>
-                          <td></td>
                         </tr>
                       )}
                     </tbody>
