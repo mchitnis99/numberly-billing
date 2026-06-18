@@ -32,7 +32,7 @@ function normalizeMonth(m: string): string {
   return MONTH_ORDER[mon] + ' ' + fullYr
 }
 
-const JUL_2025 = 2025 * 100 + 6
+const JUL_2026 = 2026 * 100 + 6
 
 type MemberKey = 'J' | 'M' | 'A' | 'G'
 const MEMBERS: { key: MemberKey; name: string }[] = [
@@ -61,7 +61,7 @@ export function AllocationsView({ projects }: { projects: Project[] }) {
     const now = new Date()
     const maxNum = now.getFullYear() * 100 + now.getMonth()
     const result: string[] = []
-    let yr = 2025, mon = 6  // Jul 2025
+    let yr = 2026, mon = 6  // Jul 2026
     while (yr * 100 + mon <= maxNum) {
       result.push(MONTH_ORDER[mon] + ' ' + yr)
       mon++
@@ -176,7 +176,7 @@ export function AllocationsView({ projects }: { projects: Project[] }) {
                   padding: '8px 14px', borderBottom: '0.5px solid var(--border)',
                   background: 'var(--surface)',
                 }}>
-                  <span style={{ fontSize: 11, color: 'var(--text2)' }}>Opening Balance (as of Jun 30 2025):</span>
+                  <span style={{ fontSize: 11, color: 'var(--text2)' }}>Opening Balance (as of Jun 30 2026):</span>
                   {isEditOpening ? (
                     <input
                       autoFocus
