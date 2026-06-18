@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useMemo } from 'react'
-import { Project, totalNetReceived, fmt, ALLOC_COLORS } from '../lib/data'
+import { Project, totalGrossReceived, fmt, ALLOC_COLORS } from '../lib/data'
 import { Payout, DevEarning, fetchPayouts, fetchDevEarnings, upsertPayout, upsertDevEarning } from '../lib/payouts'
 
 const MONTH_ORDER = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
@@ -78,7 +78,7 @@ export function AllocationsView({ projects }: { projects: Project[] }) {
       const ps = projects.filter(p => normalizeMonth(p.month) === month)
       const sales = ps.filter(p => p.soldBy?.toUpperCase() === key).reduce((s, p) => s + p.amount, 0)
       const revShare = ps.reduce((s, p) => s + p.amount * (p.alloc[key] || 0) / 100, 0)
-      const cashEarned = ps.reduce((s, p) => s + totalNetReceived(p) * (p.alloc[key] || 0) / 100, 0)
+      const cashEarned = ps.reduce((s, p) => s + totalGrossReceived(p) * (p.alloc[key] || 0) / 100, 0)
       const devEarning = devEarnings.find(d => d.member === key && d.month === month)?.amount || 0
       const payout = payouts.find(p => p.member === key && p.month === month)?.amount || 0
       const payAvailable = running + cashEarned + devEarning

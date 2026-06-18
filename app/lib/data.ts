@@ -205,6 +205,13 @@ export function totalNetReceived(p: Project): number {
   return p.invoices.reduce((s, inv) => s + (invIsPaid(inv) ? invoiceNet(inv) : 0), 0)
 }
 
+export function totalGrossReceived(p: Project): number {
+  return p.invoices.reduce((s, inv) => {
+    if (!invIsPaid(inv)) return s
+    return s + invoiceNet(inv) + (inv.uwFee || 0) + (inv.stripeFee || 0)
+  }, 0)
+}
+
 export function remainingBalance(p: Project): number {
   if (p.importedBalance > 0) return p.importedBalance
   const paid = p.invoices.reduce((s, inv) => s + (invIsPaid(inv) ? inv.amt : 0), 0)
