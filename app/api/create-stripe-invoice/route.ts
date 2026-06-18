@@ -3,23 +3,30 @@ import Stripe from 'stripe'
 
 export async function POST(req: NextRequest) {
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!)
-  const { clientEmail, clientName, amount, description } = await req.json()
-  console.log('[stripe] received:', { clientEmail, clientName, amount })
+  const { clientEmail, clientName, contactName, amount, description } = await req.json()
+  console.log('[stripe] received:', { clientEmail, clientName, contactName, amount })
 
   if (!clientEmail || !amount) {
     return NextResponse.json({ error: 'clientEmail and amount are required' }, { status: 400 })
   }
 
-  // Find or create customer
+  // Find or create customer, always sync name and contact metadata
   const existing = await stripe.customers.list({ email: clientEmail, limit: 1 })
-  let customer = existing.data.length > 0
-    ? existing.data[0]
-    : await stripe.customers.create({ email: clientEmail, name: clientName || undefined })
-  if (existing.data.length > 0 && !customer.name && clientName) {
-    customer = await stripe.customers.update(customer.id, { name: clientName })
+  let customer: Stripe.Customer
+  if (existing.data.length > 0) {
+    customer = await stripe.customers.update(existing.data[0].id, {
+      name: clientName || undefined,
+      metadata: { contact: contactName || '' },
+    })
+  } else {
+    customer = await stripe.customers.create({
+      email: clientEmail,
+      name: clientName || undefined,
+      metadata: { contact: contactName || '' },
+    })
   }
 
-  // Create draft invoice with description as memo
+  // Create draft invoice
   const invoice = await stripe.invoices.create({
     customer: customer.id,
     collection_method: 'send_invoice',

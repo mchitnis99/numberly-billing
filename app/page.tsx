@@ -695,7 +695,8 @@ export default function App() {
                           headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({
                             clientEmail: detail.email,
-                            clientName: detail.contact && detail.startup ? `${detail.contact} - ${detail.startup}` : detail.contact || detail.startup,
+                            clientName: detail.startup,
+                            contactName: detail.contact,
                             amount: detail.amount,
                             description: detail.description || `${detail.startup} - ${detail.delivery} - ${detail.month}`,
                           }),
