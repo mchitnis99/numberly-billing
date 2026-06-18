@@ -116,8 +116,22 @@ export default function App() {
 
   useEffect(() => {
     let cancelled = false
+    const VALID_MONTH = /^[A-Za-z]{3} \d{4}$/
     fetchProjects()
-      .then(data => { if (!cancelled) setProjects(data) })
+      .then(data => {
+        if (cancelled) return
+        // One-time self-healing: fix any months stored in a bad format (e.g. "1/1/25")
+        const fixed = data.map(p => {
+          if (VALID_MONTH.test(p.month)) return p
+          const d = new Date(p.month)
+          if (isNaN(d.getTime())) return p
+          const month = d.toLocaleString('en-US', { month: 'short' }) + ' ' + d.getFullYear()
+          const updated = { ...p, month }
+          upsertProject(updated).catch(err => console.error('Month fix failed for', p.startup, err))
+          return updated
+        })
+        setProjects(fixed)
+      })
       .catch(err => console.error('Failed to load projects', err))
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }

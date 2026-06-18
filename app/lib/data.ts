@@ -305,6 +305,13 @@ export function parseCSVRow(headers: string[], row: string[]): Partial<Project> 
         const fullYr = yr < 100 ? (yr > 50 ? 1900 + yr : 2000 + yr) : yr
         return MONTH_ORDER[MONTH_ORDER.indexOf(space[1])] + ' ' + fullYr
       }
+      // Fallback: try parsing as a date (handles "1/1/25", "1/1/2025", etc.)
+      if (!/^[A-Za-z]{3} \d{4}$/.test(raw)) {
+        const d = new Date(raw)
+        if (!isNaN(d.getTime())) {
+          return d.toLocaleString('en-US', { month: 'short' }) + ' ' + d.getFullYear()
+        }
+      }
       return raw
     })(),
     channel: col('channel'),
