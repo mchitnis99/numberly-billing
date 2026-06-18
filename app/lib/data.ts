@@ -188,6 +188,9 @@ function invIsPaid(inv: Invoice): boolean {
 export function paymentStatus(p: Project): 'Fully paid' | 'Partial' | 'Unpaid' | 'Bad Debt' {
   if (p.badDebt) return 'Bad Debt'
   const paid = p.invoices.reduce((s, inv) => s + (invIsPaid(inv) ? inv.amt : 0), 0)
+  // importedBalance > 0 means there is still an outstanding balance — treat as Partial even if
+  // the synthetic import invoice is marked isPaid (which just means some payment was received)
+  if (p.importedBalance > 0) return paid > 0 ? 'Partial' : 'Unpaid'
   if (p.amount > 0 && paid >= p.amount) return 'Fully paid'
   if (paid > 0) return 'Partial'
   return 'Unpaid'
@@ -318,7 +321,16 @@ export function parseCSVRow(headers: string[], row: string[]): Partial<Project> 
     amount: bookedAmt,
     billingThru: col('billing thru'),
     invoicingValue: col('invoicing value'),
-    billingDetails: bookedStatus,
+    billingDetails: (() => {
+      switch (bookedStatus) {
+        case 'Fully paid':       return 'Fully paid'
+        case 'Partially paid':   return 'Partially paid'
+        case 'Fully billed':     return 'Fully billed'
+        case 'Not yet billed':   return 'Not yet billed'
+        case 'Ready for billing': return 'Ready for billing'
+        default:                 return bookedStatus
+      }
+    })(),
     importedBalance: balance,
     notes: col('notes'),
     readyForBilling: false,
