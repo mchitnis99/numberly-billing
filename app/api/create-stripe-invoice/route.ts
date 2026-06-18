@@ -4,6 +4,7 @@ import Stripe from 'stripe'
 export async function POST(req: NextRequest) {
   const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!)
   const { clientEmail, clientName, amount, description } = await req.json()
+  console.log('[stripe] clientName:', clientName)
 
   if (!clientEmail || !amount) {
     return NextResponse.json({ error: 'clientEmail and amount are required' }, { status: 400 })

@@ -190,7 +190,7 @@ export async function deleteProject(id: number): Promise<void> {
 }
 
 function invIsPaid(inv: Invoice): boolean {
-  return inv.isPaid === true
+  return !!(inv.paid)
 }
 
 export function paymentStatus(p: Project): 'Fully paid' | 'Partial' | 'Unpaid' | 'Bad Debt' {
@@ -205,6 +205,7 @@ export function paymentStatus(p: Project): 'Fully paid' | 'Partial' | 'Unpaid' |
 }
 
 export function invoiceNet(inv: Invoice): number {
+  if (!inv.paid) return 0
   if ((inv.net || 0) > 0) return inv.net
   return Math.max(0, (inv.amt || 0) - (inv.uwFee || 0) - (inv.stripeFee || 0))
 }

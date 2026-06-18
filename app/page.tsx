@@ -673,7 +673,7 @@ export default function App() {
                   onChange={e => updateField(detail.id, 'readyForBilling', e.target.checked)}
                   id={`rfb-${detail.id}`} />
                 <label htmlFor={`rfb-${detail.id}`} style={{ fontSize: 12, color: 'var(--text)', cursor: 'pointer', textTransform: 'none', letterSpacing: 0 }}>
-                  Mark as ready to bill (work done, invoice not sent yet)
+                  Mark Ready to Bill
                 </label>
               </div>
               {detail.readyForBilling && detail.channel !== 'UW' && (
@@ -730,7 +730,7 @@ export default function App() {
 
             <div className="section-label">Revenue allocation</div>
             <div className="alloc-row">
-              {(['J','M','N','A','G','S'] as (keyof Allocation)[]).map(k => (
+              {(['J','M','N','A','G'] as (keyof Allocation)[]).map(k => (
                 <div className="alloc-cell" key={k}>
                   <div className="alloc-key" style={{ color: ALLOC_COLORS[k] }}>{k}%</div>
                   <input className="pe-input" type="number" min="0" max="100"
