@@ -48,7 +48,8 @@ function emptyProject(id: number): Project {
     modelDesc: '', soldBy: 'M', alloc: emptyAlloc(), description: '', upworkName: '', country: 'US',
     contact: '', email: '', date: '', amount: 0, billingThru: 'UW', invoicingValue: '',
     billingDetails: '',
-    readyForBilling: false, badDebt: false, importedBalance: 0, notes: '', invoices: [emptyInv()]
+    readyForBilling: false, badDebt: false, importedBalance: 0, notes: '', invoices: [emptyInv()],
+    stripeInvoiceId: '', stripeInvoiceUrl: '',
   }
 }
 
@@ -117,6 +118,8 @@ export default function App() {
   const [showImport, setShowImport] = useState(false)
   const [importMsg, setImportMsg] = useState('')
   const [showAddRow, setShowAddRow] = useState(false)
+  const [stripeLoading, setStripeLoading] = useState(false)
+  const [stripeMsg, setStripeMsg] = useState<{ type: 'link' | 'error'; text: string; url?: string } | null>(null)
   const [loading, setLoading] = useState(true)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const fileRef = useRef<HTMLInputElement>(null)
@@ -681,6 +684,57 @@ export default function App() {
                   Mark as Bad Debt (project will not be collected)
                 </label>
               </div>
+
+              {detail.readyForBilling && detail.channel !== 'UW' && (
+                <div className="pe-group full" style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                  <button
+                    className="btn btn-primary"
+                    disabled={stripeLoading}
+                    onClick={async () => {
+                      setStripeLoading(true)
+                      setStripeMsg(null)
+                      try {
+                        const res = await fetch('/api/create-stripe-invoice', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({
+                            clientEmail: detail.email,
+                            clientName: detail.contact,
+                            amount: detail.amount,
+                            description: `${detail.startup} - ${detail.delivery} - ${detail.month}`,
+                          }),
+                        })
+                        const data = await res.json()
+                        if (!res.ok) throw new Error(data.error || 'Unknown error')
+                        updateField(detail.id, 'stripeInvoiceId', data.invoiceId)
+                        updateField(detail.id, 'stripeInvoiceUrl', data.invoiceUrl)
+                        setStripeMsg({ type: 'link', text: 'View in Stripe →', url: data.invoiceUrl })
+                      } catch (err) {
+                        setStripeMsg({ type: 'error', text: err instanceof Error ? err.message : String(err) })
+                      } finally {
+                        setStripeLoading(false)
+                      }
+                    }}
+                  >
+                    {stripeLoading ? 'Creating…' : 'Create Stripe Invoice'}
+                  </button>
+                  {stripeMsg && stripeMsg.type === 'link' && (
+                    <a href={stripeMsg.url} target="_blank" rel="noreferrer"
+                      style={{ fontSize: 12, color: 'var(--green)', textDecoration: 'none', fontWeight: 500 }}>
+                      {stripeMsg.text}
+                    </a>
+                  )}
+                  {stripeMsg && stripeMsg.type === 'error' && (
+                    <span style={{ fontSize: 12, color: 'var(--red)' }}>{stripeMsg.text}</span>
+                  )}
+                  {detail.stripeInvoiceUrl && !stripeMsg && (
+                    <a href={detail.stripeInvoiceUrl} target="_blank" rel="noreferrer"
+                      style={{ fontSize: 12, color: 'var(--text2)', textDecoration: 'none' }}>
+                      View existing invoice →
+                    </a>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="section-label">Revenue allocation</div>
