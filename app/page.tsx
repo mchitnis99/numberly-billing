@@ -47,7 +47,59 @@ function emptyProject(id: number): Project {
 
 type EditCell = { id: number; field: string } | null
 
+function AuthGate({ onAuth }: { onAuth: () => void }) {
+  const [pwInput, setPwInput] = useState('')
+  const [pwError, setPwError] = useState(false)
+
+  function submitPassword(e: React.FormEvent) {
+    e.preventDefault()
+    const expected = process.env.NEXT_PUBLIC_APP_PASSWORD
+    if (pwInput === expected) {
+      sessionStorage.setItem('nb_auth', 'true')
+      onAuth()
+    } else {
+      setPwError(true)
+      setPwInput('')
+    }
+  }
+
+  return (
+    <div style={{ minHeight: '100vh', background: '#0f1a2e', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+      <div style={{ background: '#1a2744', border: '0.5px solid rgba(255,255,255,0.1)', borderRadius: 12, padding: '2.5rem 2rem', width: 320, display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: 18, fontWeight: 700, color: '#1D9E75', letterSpacing: '-0.01em', marginBottom: 4 }}>Numberly Billing</div>
+          <div style={{ fontSize: 12, color: 'rgba(255,255,255,0.4)' }}>Enter password to continue</div>
+        </div>
+        <form onSubmit={submitPassword} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+          <input
+            autoFocus
+            type="password"
+            value={pwInput}
+            onChange={e => { setPwInput(e.target.value); setPwError(false) }}
+            placeholder="Password"
+            style={{
+              background: 'rgba(255,255,255,0.06)', border: `1px solid ${pwError ? '#D85A30' : 'rgba(255,255,255,0.12)'}`,
+              borderRadius: 6, padding: '8px 12px', color: '#f0f0ec', fontSize: 13, fontFamily: 'inherit', outline: 'none',
+            }}
+          />
+          {pwError && <div style={{ fontSize: 11, color: '#D85A30' }}>Incorrect password</div>}
+          <button type="submit" style={{
+            background: '#1D9E75', border: 'none', borderRadius: 6, padding: '8px 0',
+            color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit',
+          }}>Enter</button>
+        </form>
+      </div>
+    </div>
+  )
+}
+
 export default function App() {
+  const [authed, setAuthed] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    setAuthed(sessionStorage.getItem('nb_auth') === 'true')
+  }, [])
+
   const [projects, setProjects] = useState<Project[]>([])
   const [view, setView] = useState<View>('all')
   const [sortKey, setSortKey] = useState<SortKey>('date')
@@ -294,6 +346,9 @@ export default function App() {
         className="cell-input" style={{ width: type === 'number' ? 80 : 120 }} />
     )
   }
+
+  if (authed === null) return null
+  if (!authed) return <AuthGate onAuth={() => setAuthed(true)} />
 
   return (
     <>

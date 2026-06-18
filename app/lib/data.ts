@@ -282,8 +282,6 @@ export function parseCSVRow(headers: string[], row: string[]): Partial<Project> 
   // An invoice counts as paid if any payment has been made (balance < booked amount)
   const isCsvPaid = bookedAmt > 0 && balance < bookedAmt
 
-  console.log('[net] client:', client, 'inv.net:', invNet, 'booked:', bookedAmt)
-
   const invoice: Invoice = {
     num: '', date: '', amt: bookedAmt, due: '', paid: isCsvPaid ? 'imported' : '',
     net: invNet, uwFee: 0, stripeFee: 0, isPaid: isCsvPaid,
