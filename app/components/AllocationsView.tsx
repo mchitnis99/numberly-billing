@@ -56,10 +56,12 @@ export function AllocationsView({ projects }: { projects: Project[] }) {
     fetchDevEarnings().then(setDevEarnings).catch(console.error)
   }, [])
 
-  // All months from Jul 2025 to current month, chronological
+  // All months from Jul 2026 through current month, always at least 6 months visible
   const allMonths = useMemo((): string[] => {
     const now = new Date()
-    const maxNum = now.getFullYear() * 100 + now.getMonth()
+    const curNum = now.getFullYear() * 100 + now.getMonth()
+    // Show at least through Dec 2026 so the table is never empty
+    const maxNum = Math.max(curNum, 2026 * 100 + 11)
     const result: string[] = []
     let yr = 2026, mon = 6  // Jul 2026
     while (yr * 100 + mon <= maxNum) {
