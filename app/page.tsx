@@ -110,7 +110,7 @@ export default function App() {
 
   const [projects, setProjects] = useState<Project[]>([])
   const [view, setView] = useState<View>('all')
-  const [sortKey, setSortKey] = useState<SortKey>('date')
+  const [sortKey, setSortKey] = useState<SortKey>('month')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const [search, setSearch] = useState('')
   const [editCell, setEditCell] = useState<EditCell>(null)
@@ -297,6 +297,11 @@ export default function App() {
       else if (sortKey === 'readyForBilling') { av = a.readyForBilling ? 1 : 0; bv = b.readyForBilling ? 1 : 0 }
       if (av < bv) return sortDir === 'asc' ? -1 : 1
       if (av > bv) return sortDir === 'asc' ? 1 : -1
+      // Tiebreaker: month desc, then date desc
+      const mDiff = monthToNum(b.month) - monthToNum(a.month)
+      if (mDiff !== 0) return mDiff
+      if (b.date > a.date) return 1
+      if (b.date < a.date) return -1
       return 0
     })
     return result
@@ -630,7 +635,7 @@ export default function App() {
             <div className="section-label">Project details</div>
             <div className="panel-edit">
               {([
-                ['Client / startup', 'startup', 'text'],
+                ['Client', 'startup', 'text'],
                 ['Month', 'month', 'select', MONTH_OPTIONS],
                 ['New / Repeat', 'newrep', 'select', ['New','Repeat']],
                 ['Channel', 'channel', 'select', ['UW','Repeat','Referral','Website']],
@@ -676,7 +681,7 @@ export default function App() {
                   Mark Ready to Bill
                 </label>
               </div>
-              {detail.readyForBilling && detail.channel !== 'UW' && (
+              {detail.readyForBilling && detail.billingThru?.toLowerCase().includes('stripe') && (
                 <div className="pe-group full" style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                   <button
                     className="btn btn-primary"
@@ -690,7 +695,7 @@ export default function App() {
                           headers: { 'Content-Type': 'application/json' },
                           body: JSON.stringify({
                             clientEmail: detail.email,
-                            clientName: detail.contact || detail.upworkName || detail.startup,
+                            clientName: detail.contact && detail.startup ? `${detail.contact} - ${detail.startup}` : detail.contact || detail.startup,
                             amount: detail.amount,
                             description: detail.description || `${detail.startup} - ${detail.delivery} - ${detail.month}`,
                           }),
