@@ -658,7 +658,7 @@ export default function App() {
                 </div>
               ))}
               <div className="pe-group full">
-                <div className="pe-label">Billing details</div>
+                <div className="pe-label">Internal Billing Notes</div>
                 <textarea className="pe-input" rows={2} value={detail.billingDetails}
                   onChange={e => updateField(detail.id, 'billingDetails', e.target.value)}
                   placeholder="e.g. Bill $500 now, hold rest" />
@@ -676,15 +676,6 @@ export default function App() {
                   Mark as ready to bill (work done, invoice not sent yet)
                 </label>
               </div>
-              <div className="pe-group full" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <input type="checkbox" checked={detail.badDebt}
-                  onChange={e => updateField(detail.id, 'badDebt', e.target.checked)}
-                  id={`bd-${detail.id}`} />
-                <label htmlFor={`bd-${detail.id}`} style={{ fontSize: 12, color: 'var(--red)', cursor: 'pointer', textTransform: 'none', letterSpacing: 0 }}>
-                  Mark as Bad Debt (project will not be collected)
-                </label>
-              </div>
-
               {detail.readyForBilling && detail.channel !== 'UW' && (
                 <div className="pe-group full" style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                   <button
@@ -701,7 +692,7 @@ export default function App() {
                             clientEmail: detail.email,
                             clientName: detail.contact,
                             amount: detail.amount,
-                            description: `${detail.startup} - ${detail.delivery} - ${detail.month}`,
+                            description: detail.description || `${detail.startup} - ${detail.delivery} - ${detail.month}`,
                           }),
                         })
                         const data = await res.json()
@@ -795,6 +786,11 @@ export default function App() {
 
             <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '0.5px solid var(--border)', display: 'flex', gap: 8 }}>
               <button className="btn btn-danger" onClick={() => { if (confirm('Delete this project?')) deleteProject(detail.id) }}>Delete project</button>
+              <button
+                onClick={() => updateField(detail.id, 'badDebt', !detail.badDebt)}
+                style={{ padding: '4px 12px', borderRadius: 'var(--radius)', border: `1px solid ${detail.badDebt ? '#888' : '#8B0000'}`, background: detail.badDebt ? 'rgba(136,136,136,0.1)' : 'rgba(139,0,0,0.15)', color: detail.badDebt ? 'var(--text2)' : '#ff6b6b', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>
+                {detail.badDebt ? 'Remove Bad Debt' : 'Mark as Bad Debt'}
+              </button>
             </div>
           </div>
         </div>

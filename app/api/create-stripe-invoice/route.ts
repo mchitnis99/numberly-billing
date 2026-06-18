@@ -15,11 +15,12 @@ export async function POST(req: NextRequest) {
     ? existing.data[0]
     : await stripe.customers.create({ email: clientEmail, name: clientName || undefined })
 
-  // Create draft invoice
+  // Create draft invoice with description as memo
   const invoice = await stripe.invoices.create({
     customer: customer.id,
     collection_method: 'send_invoice',
     days_until_due: 30,
+    description: description || undefined,
   })
 
   // Add line item
