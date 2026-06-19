@@ -10,7 +10,7 @@ import { ChartsView } from './components/ChartsView'
 import { AllocationsView } from './components/AllocationsView'
 
 type SortKey = 'month' | 'client' | 'amount' | 'balance' | 'status' | 'date' | 'readyForBilling'
-type View = 'all' | 'outstanding' | 'ready' | 'paid' | 'bad-debt' | 'charts' | 'allocations'
+type View = 'all' | 'outstanding' | 'ready' | 'invoiced' | 'paid' | 'bad-debt' | 'charts' | 'allocations'
 
 const MONTH_ORDER = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 const MONTH_OPTIONS: string[] = []
@@ -279,6 +279,7 @@ export default function App() {
     const matchView = view === 'all' ? true :
       view === 'outstanding' ? (remainingBalance(p) > 0 && !p.badDebt) :
       view === 'ready' ? p.readyForBilling :
+      view === 'invoiced' ? (!!(p.invoicedAt && p.invoicedAt.length > 0) && status !== 'Fully paid') :
       view === 'paid' ? status === 'Fully paid' :
       view === 'bad-debt' ? p.badDebt : true
     return matchSearch && matchView
@@ -442,7 +443,7 @@ export default function App() {
         .badge-repeat { background: var(--amber-bg); color: var(--amber-text); }
         .badge-ready { background: var(--amber-bg); color: var(--amber-text); }
         .badge-baddebt { background: #2d1212; color: #e07070; font-weight: 600; }
-        .badge-invoiced { background: rgba(55,138,221,0.15); color: #378ADD; }
+        .badge-invoiced { background: var(--blue-bg); color: var(--blue-text); }
         @media (prefers-color-scheme: light) { .badge-baddebt { background: #fce8e8; color: #8b1a1a; } }
         tr.baddebt-row td:first-child { border-left: 3px solid var(--red); }
         .sort-arrow { margin-left: 3px; opacity: 0.5; }
@@ -483,7 +484,7 @@ export default function App() {
         <div className="nav-inner">
           <span className="nav-brand">Numberly Billing</span>
           <div className="nav-views">
-            {([['charts','Charts'],['all','All'],['outstanding','Outstanding'],['ready','Ready to bill'],['paid','Paid'],['bad-debt','Bad Debt'],['allocations','Allocations']] as [View,string][]).map(([v,l]) => (
+            {([['charts','Charts'],['all','All'],['outstanding','Outstanding'],['ready','Ready to bill'],['invoiced','Invoiced'],['paid','Paid'],['bad-debt','Bad Debt'],['allocations','Allocations']] as [View,string][]).map(([v,l]) => (
               <button key={v} className={`nav-view ${view===v?'active':''}`} onClick={() => setView(v)}>{l}{v==='ready'&&readyCount>0?` (${readyCount})`:''}</button>
             ))}
           </div>
@@ -588,7 +589,7 @@ export default function App() {
                     <td>
                       <span className={`badge badge-${status === 'Fully paid' ? 'paid' : status === 'Partial' ? 'partial' : status === 'Bad Debt' ? 'baddebt' : 'unpaid'}`}>{status}</span>
                       {p.readyForBilling && <span className="badge badge-ready" style={{ marginLeft: 4 }}>Ready</span>}
-                      {p.invoicedAt && status !== 'Fully paid' && <span className="badge badge-invoiced" style={{ marginLeft: 4 }}>Invoiced</span>}
+                      {p.invoicedAt && p.invoicedAt.length > 0 && status !== 'Fully paid' && <span className="badge badge-invoiced" style={{ marginLeft: 4 }}>Invoiced</span>}
                     </td>
                     <td className="amt" style={{ color: 'var(--green)' }}>{fmt(net)}</td>
                     <td className="amt" style={{ color: bal > 0 ? 'var(--amber)' : 'var(--text3)', fontWeight: bal > 0 ? 500 : 400 }}>{fmt(bal)}</td>
