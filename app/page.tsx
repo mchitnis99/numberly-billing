@@ -48,7 +48,7 @@ function emptyProject(id: number): Project {
     modelDesc: '', soldBy: 'M', alloc: emptyAlloc(), description: '', upworkName: '', country: 'US',
     contact: '', email: '', date: '', amount: 0, billingThru: 'UW', invoicingValue: '',
     billingDetails: '',
-    readyForBilling: false, badDebt: false, importedBalance: 0, notes: '', invoices: [emptyInv()],
+    readyForBilling: false, badDebt: false, importedBalance: 0, importedData: false, notes: '', invoices: [emptyInv()],
     stripeInvoiceId: '', stripeInvoiceUrl: '', invoicedAt: '',
   }
 }
@@ -179,7 +179,8 @@ export default function App() {
         }
         return { ...p, invoices: invs }
       }
-      return { ...p, [field]: field === "amount" ? +(value as string) || 0 : value }
+      if (field === 'amount') return { ...p, amount: +(value as string) || 0, importedData: false, importedBalance: 0 }
+      return { ...p, [field]: value }
     })
   }
 
@@ -325,6 +326,7 @@ export default function App() {
   const totalCollected = projects.reduce((s, p) => s + totalNetReceived(p), 0)
   const totalOutstanding = projects.reduce((s, p) => s + remainingBalance(p), 0)
   const readyCount = projects.filter(p => p.readyForBilling).length
+  const invoicedCount = projects.filter(p => !!(p.invoicedAt && p.invoicedAt.length > 0) && paymentStatus(p) !== 'Fully paid').length
 
   function InlineEdit({ id, field, value, type = 'text', options }: {
     id: number; field: string; value: string | number | boolean; type?: string; options?: string[]
@@ -485,7 +487,7 @@ export default function App() {
           <span className="nav-brand">Numberly Billing</span>
           <div className="nav-views">
             {([['charts','Charts'],['all','All'],['outstanding','Outstanding'],['ready','Ready to bill'],['invoiced','Invoiced'],['paid','Paid'],['bad-debt','Bad Debt'],['allocations','Allocations']] as [View,string][]).map(([v,l]) => (
-              <button key={v} className={`nav-view ${view===v?'active':''}`} onClick={() => setView(v)}>{l}{v==='ready'&&readyCount>0?` (${readyCount})`:''}</button>
+              <button key={v} className={`nav-view ${view===v?'active':''}`} onClick={() => setView(v)}>{l}{v==='ready'&&readyCount>0?` (${readyCount})`:''}{v==='invoiced'&&invoicedCount>0?` (${invoicedCount})`:''}</button>
             ))}
           </div>
           <div className="nav-actions">
@@ -589,7 +591,7 @@ export default function App() {
                     <td>
                       <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
                         <span className={`badge badge-${status === 'Fully paid' ? 'paid' : status === 'Partial' ? 'partial' : status === 'Bad Debt' ? 'baddebt' : 'unpaid'}`}>{status}</span>
-                        {p.readyForBilling && <span className="badge badge-ready">Ready</span>}
+                        {p.readyForBilling && !p.invoicedAt && <span className="badge badge-ready">Ready</span>}
                         {p.invoicedAt && p.invoicedAt.length > 0 && status !== 'Fully paid' && <span className="badge badge-invoiced">Invoiced</span>}
                       </div>
                     </td>
