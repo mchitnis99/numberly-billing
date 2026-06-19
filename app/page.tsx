@@ -587,9 +587,11 @@ export default function App() {
                     <td className="amt"><InlineEdit id={p.id} field="amount" value={p.amount} type="number" /></td>
                     <td><InlineEdit id={p.id} field="billingThru" value={p.billingThru} options={['UW','Stripe','Bank Transfer','Open Link']} /></td>
                     <td>
-                      <span className={`badge badge-${status === 'Fully paid' ? 'paid' : status === 'Partial' ? 'partial' : status === 'Bad Debt' ? 'baddebt' : 'unpaid'}`}>{status}</span>
-                      {p.readyForBilling && <span className="badge badge-ready" style={{ marginLeft: 4 }}>Ready</span>}
-                      {p.invoicedAt && p.invoicedAt.length > 0 && status !== 'Fully paid' && <span className="badge badge-invoiced" style={{ marginLeft: 4 }}>Invoiced</span>}
+                      <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <span className={`badge badge-${status === 'Fully paid' ? 'paid' : status === 'Partial' ? 'partial' : status === 'Bad Debt' ? 'baddebt' : 'unpaid'}`}>{status}</span>
+                        {p.readyForBilling && <span className="badge badge-ready">Ready</span>}
+                        {p.invoicedAt && p.invoicedAt.length > 0 && status !== 'Fully paid' && <span className="badge badge-invoiced">Invoiced</span>}
+                      </div>
                     </td>
                     <td className="amt" style={{ color: 'var(--green)' }}>{fmt(net)}</td>
                     <td className="amt" style={{ color: bal > 0 ? 'var(--amber)' : 'var(--text3)', fontWeight: bal > 0 ? 500 : 400 }}>{fmt(bal)}</td>
@@ -600,6 +602,9 @@ export default function App() {
             </tbody>
           </table>
         </div>
+        {view === 'invoiced' && (
+          <p style={{ fontSize: 11, color: 'var(--text3)', marginTop: 8 }}>Projects move to Paid once payment is received.</p>
+        )}
         </>)}
       </div>
 
@@ -684,6 +689,18 @@ export default function App() {
                   Mark Ready to Bill
                 </label>
               </div>
+              {detail.invoicedAt && detail.invoicedAt.length > 0 && (
+                <div className="pe-group full" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 11, color: 'var(--blue-text)' }}>Invoiced {detail.invoicedAt}</span>
+                  <button
+                    className="btn"
+                    style={{ fontSize: 11, padding: '2px 8px', color: 'var(--text3)' }}
+                    onClick={() => updateField(detail.id, 'invoicedAt', '')}
+                  >
+                    Remove
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="section-label">Revenue allocation</div>
