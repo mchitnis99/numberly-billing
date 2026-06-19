@@ -39,7 +39,7 @@ function monthToNum(m: string): number {
   return 0
 }
 
-const emptyInv = (): Invoice => ({ num: '', date: '', amt: 0, due: '', paid: '', net: 0, uwFee: 0, stripeFee: 0, isPaid: false })
+const emptyInv = (): Invoice => ({ num: '', date: '', amt: 0, due: '', paid: '', net: 0, uwFee: 0, stripeFee: 0, isPaid: false, stripeInvoiceId: '', stripeInvoiceUrl: '' })
 const emptyAlloc = (): Allocation => ({ J: 0, M: 0, N: 0, A: 0, G: 0, S: 0 })
 
 function emptyProject(id: number): Project {
@@ -49,7 +49,7 @@ function emptyProject(id: number): Project {
     contact: '', email: '', date: '', amount: 0, billingThru: 'UW', invoicingValue: '',
     billingDetails: '',
     readyForBilling: false, badDebt: false, importedBalance: 0, notes: '', invoices: [emptyInv()],
-    stripeInvoiceId: '', stripeInvoiceUrl: '',
+    stripeInvoiceId: '', stripeInvoiceUrl: '', invoicedAt: '',
   }
 }
 
@@ -118,8 +118,8 @@ export default function App() {
   const [showImport, setShowImport] = useState(false)
   const [importMsg, setImportMsg] = useState('')
   const [showAddRow, setShowAddRow] = useState(false)
-  const [stripeLoading, setStripeLoading] = useState(false)
-  const [stripeMsg, setStripeMsg] = useState<{ type: 'link' | 'error'; text: string; url?: string } | null>(null)
+  const [stripeLoading, setStripeLoading] = useState<number | null>(null)
+  const [stripeMsg, setStripeMsg] = useState<Record<number, { type: 'link' | 'error'; text: string; url?: string }>>({})
   const [loading, setLoading] = useState(true)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const fileRef = useRef<HTMLInputElement>(null)
@@ -442,6 +442,7 @@ export default function App() {
         .badge-repeat { background: var(--amber-bg); color: var(--amber-text); }
         .badge-ready { background: var(--amber-bg); color: var(--amber-text); }
         .badge-baddebt { background: #2d1212; color: #e07070; font-weight: 600; }
+        .badge-invoiced { background: rgba(55,138,221,0.15); color: #378ADD; }
         @media (prefers-color-scheme: light) { .badge-baddebt { background: #fce8e8; color: #8b1a1a; } }
         tr.baddebt-row td:first-child { border-left: 3px solid var(--red); }
         .sort-arrow { margin-left: 3px; opacity: 0.5; }
@@ -587,6 +588,7 @@ export default function App() {
                     <td>
                       <span className={`badge badge-${status === 'Fully paid' ? 'paid' : status === 'Partial' ? 'partial' : status === 'Bad Debt' ? 'baddebt' : 'unpaid'}`}>{status}</span>
                       {p.readyForBilling && <span className="badge badge-ready" style={{ marginLeft: 4 }}>Ready</span>}
+                      {p.invoicedAt && status !== 'Fully paid' && <span className="badge badge-invoiced" style={{ marginLeft: 4 }}>Invoiced</span>}
                     </td>
                     <td className="amt" style={{ color: 'var(--green)' }}>{fmt(net)}</td>
                     <td className="amt" style={{ color: bal > 0 ? 'var(--amber)' : 'var(--text3)', fontWeight: bal > 0 ? 500 : 400 }}>{fmt(bal)}</td>
@@ -681,57 +683,6 @@ export default function App() {
                   Mark Ready to Bill
                 </label>
               </div>
-              {detail.readyForBilling && detail.billingThru?.toLowerCase().includes('stripe') && (
-                <div className="pe-group full" style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-                  <button
-                    className="btn btn-primary"
-                    disabled={stripeLoading}
-                    onClick={async () => {
-                      setStripeLoading(true)
-                      setStripeMsg(null)
-                      try {
-                        const res = await fetch('/api/create-stripe-invoice', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({
-                            clientEmail: detail.email,
-                            clientName: detail.startup,
-                            contactName: detail.contact,
-                            amount: detail.amount,
-                            description: detail.description || `${detail.startup} - ${detail.delivery} - ${detail.month}`,
-                          }),
-                        })
-                        const data = await res.json()
-                        if (!res.ok) throw new Error(data.error || 'Unknown error')
-                        updateField(detail.id, 'stripeInvoiceId', data.invoiceId)
-                        updateField(detail.id, 'stripeInvoiceUrl', data.invoiceUrl)
-                        setStripeMsg({ type: 'link', text: 'View in Stripe →', url: data.invoiceUrl })
-                      } catch (err) {
-                        setStripeMsg({ type: 'error', text: err instanceof Error ? err.message : String(err) })
-                      } finally {
-                        setStripeLoading(false)
-                      }
-                    }}
-                  >
-                    {stripeLoading ? 'Creating…' : 'Create Stripe Invoice'}
-                  </button>
-                  {stripeMsg && stripeMsg.type === 'link' && (
-                    <a href={stripeMsg.url} target="_blank" rel="noreferrer"
-                      style={{ fontSize: 12, color: 'var(--green)', textDecoration: 'none', fontWeight: 500 }}>
-                      {stripeMsg.text}
-                    </a>
-                  )}
-                  {stripeMsg && stripeMsg.type === 'error' && (
-                    <span style={{ fontSize: 12, color: 'var(--red)' }}>{stripeMsg.text}</span>
-                  )}
-                  {detail.stripeInvoiceUrl && !stripeMsg && (
-                    <a href={detail.stripeInvoiceUrl} target="_blank" rel="noreferrer"
-                      style={{ fontSize: 12, color: 'var(--text2)', textDecoration: 'none' }}>
-                      View existing invoice →
-                    </a>
-                  )}
-                </div>
-              )}
             </div>
 
             <div className="section-label">Revenue allocation</div>
@@ -751,9 +702,8 @@ export default function App() {
             <div className="section-label">Invoices</div>
             {[0, 1, 2].map(i => {
               const inv = detail.invoices[i]
-              const hasData = inv && (inv.num || inv.amt > 0)
-              if (!hasData && i > 0 && !detail.invoices[i - 1]) return null
               const net = inv ? invoiceNet(inv) : 0
+              const showStripeBtn = detail.billingThru?.toLowerCase().includes('stripe') && (inv?.amt ?? 0) > 0
               return (
                 <div className="inv-card" key={i}>
                   <div style={{ fontSize: 11, fontWeight: 500, color: 'var(--text2)', marginBottom: 8 }}>
@@ -786,6 +736,63 @@ export default function App() {
                       </div>
                     )
                   })()}
+                  {showStripeBtn && (
+                    <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      {inv?.stripeInvoiceId ? (
+                        <a href={inv.stripeInvoiceUrl || `https://dashboard.stripe.com/invoices/${inv.stripeInvoiceId}`}
+                          target="_blank" rel="noreferrer"
+                          style={{ fontSize: 11, color: 'var(--green)', textDecoration: 'none', fontWeight: 500 }}>
+                          View in Stripe →
+                        </a>
+                      ) : (
+                        <>
+                          <button
+                            className="btn btn-primary"
+                            style={{ fontSize: 11, padding: '3px 10px' }}
+                            disabled={stripeLoading === i}
+                            onClick={async () => {
+                              setStripeLoading(i)
+                              setStripeMsg(prev => { const n = {...prev}; delete n[i]; return n })
+                              try {
+                                const res = await fetch('/api/create-stripe-invoice', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({
+                                    clientEmail: detail.email,
+                                    clientName: detail.startup,
+                                    contactName: detail.contact,
+                                    amount: inv!.amt,
+                                    description: detail.description || `${detail.startup} - ${detail.delivery} - ${detail.month}`,
+                                  }),
+                                })
+                                const data = await res.json()
+                                if (!res.ok) throw new Error(data.error || 'Unknown error')
+                                updateField(detail.id, `inv.${i}.stripeInvoiceId`, data.invoiceId)
+                                updateField(detail.id, `inv.${i}.stripeInvoiceUrl`, data.invoiceUrl)
+                                updateField(detail.id, 'invoicedAt', new Date().toISOString().slice(0, 10))
+                                setStripeMsg(prev => ({ ...prev, [i]: { type: 'link', text: 'View in Stripe →', url: data.invoiceUrl } }))
+                              } catch (err) {
+                                setStripeMsg(prev => ({ ...prev, [i]: { type: 'error', text: err instanceof Error ? err.message : String(err) } }))
+                              } finally {
+                                setStripeLoading(null)
+                              }
+                            }}
+                          >
+                            {stripeLoading === i ? 'Creating…' : 'Create Stripe Invoice'}
+                          </button>
+                          {stripeMsg[i]?.type === 'error' && (
+                            <span style={{ fontSize: 11, color: 'var(--red)' }}>{stripeMsg[i].text}</span>
+                          )}
+                          {stripeMsg[i]?.type === 'link' && (
+                            <a href={stripeMsg[i].url} target="_blank" rel="noreferrer"
+                              style={{ fontSize: 11, color: 'var(--green)', textDecoration: 'none', fontWeight: 500 }}>
+                              {stripeMsg[i].text}
+                            </a>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  )}
                 </div>
               )
             })}
