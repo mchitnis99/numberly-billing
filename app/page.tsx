@@ -209,7 +209,7 @@ export default function App() {
     try {
       await upsertProject(p)
       setSaveStatus('saved')
-      setTimeout(() => setSaveStatus('idle'), 1500)
+      setTimeout(() => { setSaveStatus('idle'); setDetailId(null) }, 800)
     } catch (err) {
       console.error('Failed to save project', err)
       setSaveStatus('error')
@@ -491,7 +491,7 @@ export default function App() {
         <div className="nav-inner">
           <span className="nav-brand">Numberly Billing</span>
           <div className="nav-views">
-            {([['charts','Charts'],['all','All'],['outstanding','Outstanding'],['ready','Ready to bill'],['invoiced','Invoiced'],['paid','Paid'],['bad-debt','Bad Debt'],['allocations','Allocations']] as [View,string][]).map(([v,l]) => (
+            {([['charts','Charts'],['all','All'],['ready','Ready to bill'],['outstanding','Outstanding'],['invoiced','Invoiced'],['paid','Paid'],['bad-debt','Bad Debt'],['allocations','Allocations']] as [View,string][]).map(([v,l]) => (
               <button key={v} className={`nav-view ${view===v?'active':''}`} onClick={() => setView(v)}>{l}{v==='ready'&&readyCount>0?` (${readyCount})`:''}{v==='invoiced'&&invoicedCount>0?` (${invoicedCount})`:''}</button>
             ))}
           </div>
@@ -612,7 +612,6 @@ export default function App() {
                     <td>
                       <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
                         <span className={`badge badge-${badgeClass}`}>{ps}</span>
-                        {p.invoicedAt && p.invoicedAt.length > 0 && ps !== 'Fully Paid' && <span className="badge badge-invoiced">Invoiced</span>}
                       </div>
                     </td>
                     <td className="amt" style={{ color: 'var(--green)' }}>{fmt(net)}</td>
