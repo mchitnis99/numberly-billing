@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
-  Project, Invoice, Allocation, paymentStatus, totalNetReceived, remainingBalance, invoiceNet, fmt, ALLOC_COLORS, parseCSVRow,
+  Project, Invoice, Allocation, paymentStatus, pipelineStatus, totalNetReceived, remainingBalance, invoiceNet, fmt, ALLOC_COLORS, parseCSVRow,
   fetchProjects, insertProject, insertProjects, upsertProject, deleteProject as deleteProjectRow,
 } from './lib/data'
 import { AllocBar } from './components/AllocBar'
@@ -120,6 +120,7 @@ export default function App() {
   const [showAddRow, setShowAddRow] = useState(false)
   const [stripeLoading, setStripeLoading] = useState<number | null>(null)
   const [stripeMsg, setStripeMsg] = useState<Record<number, { type: 'link' | 'error'; text: string; url?: string }>>({})
+  const [statusFilter, setStatusFilter] = useState('')
   const [loading, setLoading] = useState(true)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const fileRef = useRef<HTMLInputElement>(null)
@@ -275,7 +276,7 @@ export default function App() {
   // Filtering
   const filtered = useMemo(() => projects.filter(p => {
     const s = search.toLowerCase()
-    const matchSearch = !s || p.startup.toLowerCase().includes(s) || p.contact.toLowerCase().includes(s) || p.month.toLowerCase().includes(s) || p.channel.toLowerCase().includes(s)
+    const matchSearch = !s || p.startup.toLowerCase().includes(s) || p.contact.toLowerCase().includes(s) || p.month.toLowerCase().includes(s) || p.channel.toLowerCase().includes(s) || p.description.toLowerCase().includes(s)
     const status = paymentStatus(p)
     const matchView = view === 'all' ? true :
       view === 'outstanding' ? (remainingBalance(p) > 0 && !p.badDebt) :
@@ -283,8 +284,9 @@ export default function App() {
       view === 'invoiced' ? (!!(p.invoicedAt && p.invoicedAt.length > 0) && status !== 'Fully paid') :
       view === 'paid' ? status === 'Fully paid' :
       view === 'bad-debt' ? p.badDebt : true
-    return matchSearch && matchView
-  }), [projects, view, search])
+    const matchStatus = !statusFilter || pipelineStatus(p) === statusFilter
+    return matchSearch && matchView && matchStatus
+  }), [projects, view, search, statusFilter])
 
   // Sorting
   const sorted = useMemo(() => {
@@ -446,6 +448,9 @@ export default function App() {
         .badge-ready { background: var(--amber-bg); color: var(--amber-text); }
         .badge-baddebt { background: #2d1212; color: #e07070; font-weight: 600; }
         .badge-invoiced { background: var(--blue-bg); color: var(--blue-text); }
+        .badge-notbilled { background: var(--surface2); color: var(--text3); }
+        .badge-pipeline-invoiced { background: var(--blue-bg); color: var(--blue-text); }
+        .badge-pipeline-ready { background: var(--amber-bg); color: var(--amber-text); }
         @media (prefers-color-scheme: light) { .badge-baddebt { background: #fce8e8; color: #8b1a1a; } }
         tr.baddebt-row td:first-child { border-left: 3px solid var(--red); }
         .sort-arrow { margin-left: 3px; opacity: 0.5; }
@@ -523,9 +528,21 @@ export default function App() {
 
         {view !== 'charts' && view !== 'allocations' && (
         <div className="toolbar">
-          <input type="text" placeholder="Search client, contact, month..." value={search} onChange={e => setSearch(e.target.value)} />
+          <input type="text" placeholder="Search client, contact, month, description..." value={search} onChange={e => setSearch(e.target.value)} />
+          <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
+            style={{ padding: '5px 8px', border: '0.5px solid var(--border2)', borderRadius: 'var(--radius)', background: 'var(--surface)', color: statusFilter ? 'var(--text)' : 'var(--text3)', fontSize: 12, fontFamily: 'inherit', cursor: 'pointer' }}>
+            <option value=''>All statuses</option>
+            <option>Not Yet Billed</option>
+            <option>Ready for Billing</option>
+            <option>Invoiced 1</option>
+            <option>Invoiced 2</option>
+            <option>Invoiced 3</option>
+            <option>Partially Paid</option>
+            <option>Fully Paid</option>
+            <option>Bad Debt</option>
+          </select>
           <span style={{ fontSize: 11, color: 'var(--text3)' }}>{sorted.length} project{sorted.length !== 1 ? 's' : ''}</span>
-          {search && <button className="btn" onClick={() => setSearch('')}>Clear</button>}
+          {(search || statusFilter) && <button className="btn" onClick={() => { setSearch(''); setStatusFilter('') }}>Clear</button>}
         </div>
         )}
 
@@ -538,12 +555,13 @@ export default function App() {
               <col style={{ width: 48 }} />
               <col style={{ width: 80 }} />
               <col style={{ width: 70 }} />
-              <col style={{ width: 150 }} />
-              <col style={{ width: 60 }} />
-              <col style={{ width: 130 }} />
+              <col style={{ width: 140 }} />
+              <col style={{ width: 140 }} />
+              <col style={{ width: 55 }} />
+              <col style={{ width: 120 }} />
               <col style={{ width: 90 }} />
               <col style={{ width: 90 }} />
-              <col style={{ width: 100 }} />
+              <col style={{ width: 110 }} />
               <col style={{ width: 90 }} />
               <col style={{ width: 90 }} />
               <col style={{ width: 64 }} />
@@ -554,6 +572,7 @@ export default function App() {
                 <th onClick={() => toggleSort('month')} className={sortKey==='month'?'sorted':''}>Month<span className="sort-arrow">{sortKey==='month'?(sortDir==='asc'?'↑':'↓'):'↕'}</span></th>
                 <th>Delivery</th>
                 <th onClick={() => toggleSort('client')} className={sortKey==='client'?'sorted':''}>Client<span className="sort-arrow">{sortKey==='client'?(sortDir==='asc'?'↑':'↓'):'↕'}</span></th>
+                <th>Description</th>
                 <th>Sold by</th>
                 <th>Contact</th>
                 <th onClick={() => toggleSort('amount')} className={sortKey==='amount'?'sorted':''}>Booked<span className="sort-arrow">{sortKey==='amount'?(sortDir==='asc'?'↑':'↓'):'↕'}</span></th>
@@ -566,13 +585,14 @@ export default function App() {
             </thead>
             <tbody>
               {sorted.length === 0 && (
-                <tr><td colSpan={12}><div className="empty">{loading ? 'Loading projects…' : 'No projects found'}</div></td></tr>
+                <tr><td colSpan={13}><div className="empty">{loading ? 'Loading projects…' : 'No projects found'}</div></td></tr>
               )}
               {sorted.map(p => {
-                const status = paymentStatus(p)
+                const ps = pipelineStatus(p)
                 const bal = remainingBalance(p)
                 const net = totalNetReceived(p)
-                const rowClass = p.readyForBilling ? 'ready-row' : p.badDebt ? 'baddebt-row' : status === 'Fully paid' ? 'paid-row' : ''
+                const badgeClass = ps === 'Fully Paid' ? 'paid' : ps === 'Partially Paid' ? 'partial' : ps === 'Bad Debt' ? 'baddebt' : ps === 'Not Yet Billed' ? 'notbilled' : ps.startsWith('Invoiced') ? 'pipeline-invoiced' : ps === 'Ready for Billing' ? 'pipeline-ready' : 'notbilled'
+                const rowClass = p.badDebt ? 'baddebt-row' : ps === 'Fully Paid' ? 'paid-row' : p.readyForBilling ? 'ready-row' : ''
                 return (
                   <tr key={p.id} className={rowClass}>
                     <td style={{ textAlign: 'center' }}>
@@ -584,15 +604,15 @@ export default function App() {
                     <td><InlineEdit id={p.id} field="month" value={p.month.replace(/,/g, '').trim()} options={MONTH_OPTIONS} /></td>
                     <td><InlineEdit id={p.id} field="delivery" value={p.delivery} options={['FM','FM Update','PD','BP','Advisory','Bookkeeping']} /></td>
                     <td style={{ fontWeight: 500 }}><InlineEdit id={p.id} field="startup" value={p.startup} /></td>
+                    <td style={{ color: 'var(--text2)', fontStyle: p.description ? 'normal' : 'italic' }}><InlineEdit id={p.id} field="description" value={p.description} /></td>
                     <td><InlineEdit id={p.id} field="soldBy" value={p.soldBy} /></td>
                     <td><InlineEdit id={p.id} field="contact" value={p.contact} /></td>
                     <td className="amt"><InlineEdit id={p.id} field="amount" value={p.amount} type="number" /></td>
                     <td><InlineEdit id={p.id} field="billingThru" value={p.billingThru} options={['UW','Stripe','Bank Transfer','Open Link']} /></td>
                     <td>
                       <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap' }}>
-                        <span className={`badge badge-${status === 'Fully paid' ? 'paid' : status === 'Partial' ? 'partial' : status === 'Bad Debt' ? 'baddebt' : 'unpaid'}`}>{status}</span>
-                        {p.readyForBilling && !p.invoicedAt && <span className="badge badge-ready">Ready</span>}
-                        {p.invoicedAt && p.invoicedAt.length > 0 && status !== 'Fully paid' && <span className="badge badge-invoiced">Invoiced</span>}
+                        <span className={`badge badge-${badgeClass}`}>{ps}</span>
+                        {p.invoicedAt && p.invoicedAt.length > 0 && ps !== 'Fully Paid' && <span className="badge badge-invoiced">Invoiced</span>}
                       </div>
                     </td>
                     <td className="amt" style={{ color: 'var(--green)' }}>{fmt(net)}</td>
