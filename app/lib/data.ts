@@ -10,6 +10,7 @@ export type Invoice = {
   uwFee: number
   stripeFee: number
   isPaid: boolean
+  invoiceDetails?: string
   stripeInvoiceId?: string
   stripeInvoiceUrl?: string
 }

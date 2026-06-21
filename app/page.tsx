@@ -39,7 +39,7 @@ function monthToNum(m: string): number {
   return 0
 }
 
-const emptyInv = (): Invoice => ({ num: '', date: '', amt: 0, due: '', paid: '', net: 0, uwFee: 0, stripeFee: 0, isPaid: false, stripeInvoiceId: '', stripeInvoiceUrl: '' })
+const emptyInv = (): Invoice => ({ num: '', date: '', amt: 0, due: '', paid: '', net: 0, uwFee: 0, stripeFee: 0, isPaid: false, invoiceDetails: '', stripeInvoiceId: '', stripeInvoiceUrl: '' })
 const emptyAlloc = (): Allocation => ({ J: 0, M: 0, N: 0, A: 0, G: 0, S: 0 })
 
 function emptyProject(id: number): Project {
@@ -767,6 +767,14 @@ export default function App() {
                       <div className="pe-input" style={{ fontSize: 11, color: 'var(--green)' }}>{fmt(net)}</div>
                     </div>
                   </div>
+                  <div style={{ marginTop: 8 }}>
+                    <div className="inv-key" style={{ marginBottom: 3 }}>Invoice details</div>
+                    <textarea className="pe-input" rows={2}
+                      value={inv?.invoiceDetails || ''}
+                      onChange={e => updateField(detail.id, `inv.${i}.invoiceDetails`, e.target.value)}
+                      placeholder="Line item description for this invoice"
+                      style={{ fontSize: 11, width: '100%', resize: 'vertical' }} />
+                  </div>
                   {inv && (() => {
                     const paidLabel = inv.paid && inv.paid !== 'imported' ? `Paid ${inv.paid}` : 'Paid'
                     return (
@@ -801,7 +809,7 @@ export default function App() {
                                     clientName: detail.startup,
                                     contactName: detail.contact,
                                     amount: inv!.amt,
-                                    description: detail.description || `${detail.startup} - ${detail.delivery} - ${detail.month}`,
+                                    description: inv?.invoiceDetails || detail.description || `${detail.startup} - ${detail.delivery} - ${detail.month}`,
                                   }),
                                 })
                                 const data = await res.json()
