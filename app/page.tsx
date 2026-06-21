@@ -824,8 +824,11 @@ export default function App() {
                                     description: inv?.invoiceDetails || detail.description || `${detail.startup} - ${detail.delivery} - ${detail.month}`,
                                   }),
                                 })
+                                if (!res.ok) {
+                                  const text = await res.text()
+                                  throw new Error(text || 'Stripe invoice creation failed')
+                                }
                                 const data = await res.json()
-                                if (!res.ok) throw new Error(data.error || 'Unknown error')
                                 updateField(detail.id, `inv.${i}.stripeInvoiceId`, data.invoiceId)
                                 updateField(detail.id, `inv.${i}.stripeInvoiceUrl`, data.invoiceUrl)
                                 const today = new Date().toISOString().slice(0, 10)
