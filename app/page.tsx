@@ -477,7 +477,7 @@ export default function App() {
         .pe-group { display: flex; flex-direction: column; gap: 3px; }
         .pe-group.full { grid-column: 1 / -1; }
         .pe-label { font-size: 10px; color: var(--text2); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 500; }
-        .pe-input { padding: 6px 8px; border: 0.5px solid var(--border2); border-radius: var(--radius); background: var(--surface); color: var(--text); font-size: 12px; font-family: inherit; }
+        .pe-input { padding: 6px 8px; border: 0.5px solid var(--border2); border-radius: var(--radius); background: var(--surface); color: var(--text); font-size: 12px; font-family: inherit; box-sizing: border-box; }
         .pe-input:focus { outline: none; border-color: #1D9E75; }
         .import-panel { background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 1.25rem; margin-bottom: 1rem; }
         .import-steps { font-size: 12px; color: var(--text2); line-height: 1.8; margin-bottom: 1rem; }
@@ -751,6 +751,26 @@ export default function App() {
                   <div className="inv-grid">
                     {([
                       ['Invoice #','num','text'],['Date','date','text'],['Amount','amt','number'],
+                    ] as [string,string,string][]).map(([label, key, type]) => (
+                      <div className="inv-cell" key={key}>
+                        <div className="inv-key">{label}</div>
+                        <input className="pe-input" type={type}
+                          value={String(inv?.[key as keyof Invoice] || '')}
+                          onChange={e => updateField(detail.id, `inv.${i}.${key}`, e.target.value)}
+                          style={{ fontSize: 11 }} />
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ marginTop: 6 }}>
+                    <div className="inv-key" style={{ marginBottom: 3 }}>Invoice details</div>
+                    <textarea className="pe-input" rows={2}
+                      value={inv?.invoiceDetails || ''}
+                      onChange={e => updateField(detail.id, `inv.${i}.invoiceDetails`, e.target.value)}
+                      placeholder="Line item description for this invoice"
+                      style={{ fontSize: 11, width: '100%', resize: 'vertical' }} />
+                  </div>
+                  <div className="inv-grid" style={{ marginTop: 6 }}>
+                    {([
                       ['Due date','due','text'],['Date paid','paid','text'],
                       ['UW fee','uwFee','number'],['Stripe fee','stripeFee','number'],
                     ] as [string,string,string][]).map(([label, key, type]) => (
@@ -766,14 +786,6 @@ export default function App() {
                       <div className="inv-key">Net received</div>
                       <div className="pe-input" style={{ fontSize: 11, color: 'var(--green)' }}>{fmt(net)}</div>
                     </div>
-                  </div>
-                  <div style={{ marginTop: 8 }}>
-                    <div className="inv-key" style={{ marginBottom: 3 }}>Invoice details</div>
-                    <textarea className="pe-input" rows={2}
-                      value={inv?.invoiceDetails || ''}
-                      onChange={e => updateField(detail.id, `inv.${i}.invoiceDetails`, e.target.value)}
-                      placeholder="Line item description for this invoice"
-                      style={{ fontSize: 11, width: '100%', resize: 'vertical' }} />
                   </div>
                   {inv && (() => {
                     const paidLabel = inv.paid && inv.paid !== 'imported' ? `Paid ${inv.paid}` : 'Paid'
