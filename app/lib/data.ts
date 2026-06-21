@@ -233,14 +233,16 @@ export function pipelineStatus(p: Project): string {
   if (p.badDebt) return 'Bad Debt'
   const bal = remainingBalance(p)
   const hasAnyPaid = p.invoices.some(inv => invIsPaid(inv))
-  const invoicesWithAmt = p.invoices.filter(inv => (inv.amt || 0) > 0)
-  const totalInvoiced = invoicesWithAmt.length
 
   if (bal === 0 && p.amount > 0) return 'Fully Paid'
   if (hasAnyPaid && bal > 0) return 'Partially Paid'
-  if (totalInvoiced >= 3 && (p.invoices[2]?.amt || 0) > 0) return 'Invoiced 3'
-  if (totalInvoiced >= 2 && (p.invoices[1]?.amt || 0) > 0) return 'Invoiced 2'
-  if (totalInvoiced >= 1 && (p.invoices[0]?.amt || 0) > 0) return 'Invoiced 1'
+
+  // Only count as invoiced if the invoice has an actual date (meaning it was sent)
+  const invoicedCount = p.invoices.filter(inv => inv.date && inv.date.trim() !== '').length
+  if (invoicedCount >= 3) return 'Invoiced 3'
+  if (invoicedCount >= 2) return 'Invoiced 2'
+  if (invoicedCount >= 1) return 'Invoiced 1'
+
   if (p.readyForBilling) return 'Ready for Billing'
   return 'Not Yet Billed'
 }

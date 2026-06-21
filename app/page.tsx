@@ -809,7 +809,9 @@ export default function App() {
                                 if (!res.ok) throw new Error(data.error || 'Unknown error')
                                 updateField(detail.id, `inv.${i}.stripeInvoiceId`, data.invoiceId)
                                 updateField(detail.id, `inv.${i}.stripeInvoiceUrl`, data.invoiceUrl)
-                                updateField(detail.id, 'invoicedAt', new Date().toISOString().slice(0, 10))
+                                const today = new Date().toISOString().slice(0, 10)
+                                if (!inv?.date) updateField(detail.id, `inv.${i}.date`, today)
+                                updateField(detail.id, 'invoicedAt', today)
                                 setStripeMsg(prev => ({ ...prev, [i]: { type: 'link', text: 'View in Stripe →', url: data.invoiceUrl } }))
                               } catch (err) {
                                 setStripeMsg(prev => ({ ...prev, [i]: { type: 'error', text: err instanceof Error ? err.message : String(err) } }))
