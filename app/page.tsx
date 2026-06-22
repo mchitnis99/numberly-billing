@@ -10,7 +10,7 @@ import { ChartsView } from './components/ChartsView'
 import { AllocationsView } from './components/AllocationsView'
 
 type SortKey = 'month' | 'client' | 'amount' | 'balance' | 'status' | 'date' | 'readyForBilling'
-type View = 'active' | 'outstanding' | 'ready' | 'invoiced' | 'paid' | 'bad-debt' | 'charts' | 'allocations'
+type View = 'active' | 'outstanding' | 'ready' | 'invoiced' | 'paid' | 'bad-debt' | 'done' | 'charts' | 'allocations'
 
 const MONTH_ORDER = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 const MONTH_OPTIONS: string[] = []
@@ -48,7 +48,7 @@ function emptyProject(id: number): Project {
     modelDesc: '', soldBy: 'M', alloc: emptyAlloc(), description: '', upworkName: '', country: 'US',
     contact: '', email: '', date: '', amount: 0, billingThru: 'UW', invoicingValue: '',
     billingDetails: '',
-    readyForBilling: false, badDebt: false, importedBalance: 0, importedData: false, notes: '', invoices: [emptyInv()],
+    readyForBilling: false, badDebt: false, done: false, importedBalance: 0, importedData: false, notes: '', invoices: [emptyInv()],
     stripeInvoiceId: '', stripeInvoiceUrl: '', invoicedAt: '',
   }
 }
@@ -280,12 +280,13 @@ export default function App() {
     const matchSearch = !s || p.startup.toLowerCase().includes(s) || p.contact.toLowerCase().includes(s) || p.month.toLowerCase().includes(s) || p.channel.toLowerCase().includes(s) || p.description.toLowerCase().includes(s)
     const status = paymentStatus(p)
     const ps = pipelineStatus(p)
-    const matchView = view === 'active' ? ps !== 'Fully Paid' && !p.badDebt :
-      view === 'outstanding' ? (remainingBalance(p) > 0 && !p.badDebt) :
-      view === 'ready' ? p.readyForBilling :
-      view === 'invoiced' ? (!!(p.invoicedAt && p.invoicedAt.length > 0) && ps !== 'Fully Paid') :
+    const matchView = view === 'active' ? ps !== 'Fully Paid' && !p.badDebt && !p.done :
+      view === 'outstanding' ? (remainingBalance(p) > 0 && !p.badDebt && !p.done) :
+      view === 'ready' ? (p.readyForBilling && !p.done) :
+      view === 'invoiced' ? (!!(p.invoicedAt && p.invoicedAt.length > 0) && ps !== 'Fully Paid' && !p.done) :
       view === 'paid' ? ps === 'Fully Paid' :
-      view === 'bad-debt' ? p.badDebt : true
+      view === 'bad-debt' ? p.badDebt :
+      view === 'done' ? p.done : true
     const matchStatus = !statusFilter || ps === statusFilter
     const matchAlloc = allocFilter.size === 0 || [...allocFilter].some(k => (p.alloc[k as keyof Allocation] ?? 0) > 0)
     return matchSearch && matchView && matchStatus && matchAlloc
@@ -494,7 +495,7 @@ export default function App() {
         <div className="nav-inner">
           <span className="nav-brand">Numberly Billing</span>
           <div className="nav-views">
-            {([['charts','Charts'],['active','Active'],['ready','Ready to bill'],['outstanding','Outstanding'],['invoiced','Invoiced'],['paid','Paid'],['bad-debt','Bad Debt'],['allocations','Allocations']] as [View,string][]).map(([v,l]) => (
+            {([['charts','Charts'],['active','Active'],['ready','Ready to bill'],['outstanding','Outstanding'],['invoiced','Invoiced'],['paid','Paid'],['bad-debt','Bad Debt'],['done','Done'],['allocations','Allocations']] as [View,string][]).map(([v,l]) => (
               <button key={v} className={`nav-view ${view===v?'active':''}`} onClick={() => setView(v)}>{l}{v==='ready'&&readyCount>0?` (${readyCount})`:''}{v==='invoiced'&&invoicedCount>0?` (${invoicedCount})`:''}</button>
             ))}
           </div>
@@ -562,6 +563,7 @@ export default function App() {
           <table>
             <colgroup>
               <col style={{ width: 48 }} />
+              <col style={{ width: 48 }} />
               <col style={{ width: 80 }} />
               <col style={{ width: 70 }} />
               <col style={{ width: 140 }} />
@@ -578,6 +580,7 @@ export default function App() {
             <thead>
               <tr>
                 <th onClick={() => toggleSort('readyForBilling')} className={sortKey==='readyForBilling'?'sorted':''} title="Ready to bill">Bill?<span className="sort-arrow">{sortKey==='readyForBilling'?(sortDir==='asc'?'↑':'↓'):'↕'}</span></th>
+                <th title="Mark as done">Done?</th>
                 <th onClick={() => toggleSort('month')} className={sortKey==='month'?'sorted':''}>Month<span className="sort-arrow">{sortKey==='month'?(sortDir==='asc'?'↑':'↓'):'↕'}</span></th>
                 <th>Delivery</th>
                 <th onClick={() => toggleSort('client')} className={sortKey==='client'?'sorted':''}>Client<span className="sort-arrow">{sortKey==='client'?(sortDir==='asc'?'↑':'↓'):'↕'}</span></th>
@@ -594,7 +597,7 @@ export default function App() {
             </thead>
             <tbody>
               {sorted.length === 0 && (
-                <tr><td colSpan={13}><div className="empty">{loading ? 'Loading projects…' : 'No projects found'}</div></td></tr>
+                <tr><td colSpan={14}><div className="empty">{loading ? 'Loading projects…' : 'No projects found'}</div></td></tr>
               )}
               {sorted.map(p => {
                 const ps = pipelineStatus(p)
@@ -609,6 +612,12 @@ export default function App() {
                         onChange={e => updateField(p.id, 'readyForBilling', e.target.checked)}
                         style={{ cursor: 'pointer' }}
                         title="Mark as ready to bill" />
+                    </td>
+                    <td style={{ textAlign: 'center' }}>
+                      <input type="checkbox" checked={p.done}
+                        onChange={e => updateField(p.id, 'done', e.target.checked)}
+                        style={{ cursor: 'pointer' }}
+                        title="Mark as done" />
                     </td>
                     <td><InlineEdit id={p.id} field="month" value={p.month.replace(/,/g, '').trim()} options={MONTH_OPTIONS} /></td>
                     <td><InlineEdit id={p.id} field="delivery" value={p.delivery} options={['FM','FM Update','PD','BP','Advisory','Bookkeeping']} /></td>
