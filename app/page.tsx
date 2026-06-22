@@ -10,7 +10,7 @@ import { ChartsView } from './components/ChartsView'
 import { AllocationsView } from './components/AllocationsView'
 
 type SortKey = 'month' | 'client' | 'amount' | 'balance' | 'status' | 'date' | 'readyForBilling'
-type View = 'active' | 'outstanding' | 'ready' | 'invoiced' | 'paid' | 'bad-debt' | 'done' | 'charts' | 'allocations'
+type View = 'active' | 'outstanding' | 'ready' | 'invoiced' | 'paid' | 'bad-debt' | 'charts' | 'allocations'
 
 const MONTH_ORDER = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 const MONTH_OPTIONS: string[] = []
@@ -281,12 +281,11 @@ export default function App() {
     const status = paymentStatus(p)
     const ps = pipelineStatus(p)
     const matchView = view === 'active' ? ps !== 'Fully Paid' && !p.badDebt && !p.done :
-      view === 'outstanding' ? (remainingBalance(p) > 0 && !p.badDebt && !p.done) :
-      view === 'ready' ? (p.readyForBilling && !p.done) :
-      view === 'invoiced' ? (!!(p.invoicedAt && p.invoicedAt.length > 0) && ps !== 'Fully Paid' && !p.done) :
+      view === 'outstanding' ? (remainingBalance(p) > 0 && !p.badDebt) :
+      view === 'ready' ? p.readyForBilling :
+      view === 'invoiced' ? (!!(p.invoicedAt && p.invoicedAt.length > 0) && ps !== 'Fully Paid') :
       view === 'paid' ? ps === 'Fully Paid' :
-      view === 'bad-debt' ? p.badDebt :
-      view === 'done' ? p.done : true
+      view === 'bad-debt' ? p.badDebt : true
     const matchStatus = !statusFilter || ps === statusFilter
     const matchAlloc = allocFilter.size === 0 || [...allocFilter].some(k => (p.alloc[k as keyof Allocation] ?? 0) > 0)
     return matchSearch && matchView && matchStatus && matchAlloc
@@ -495,7 +494,7 @@ export default function App() {
         <div className="nav-inner">
           <span className="nav-brand">Numberly Billing</span>
           <div className="nav-views">
-            {([['charts','Charts'],['active','Active'],['ready','Ready to bill'],['outstanding','Outstanding'],['invoiced','Invoiced'],['paid','Paid'],['bad-debt','Bad Debt'],['done','Done'],['allocations','Allocations']] as [View,string][]).map(([v,l]) => (
+            {([['charts','Charts'],['active','Active'],['ready','Ready to bill'],['outstanding','Outstanding'],['invoiced','Invoiced'],['paid','Paid'],['bad-debt','Bad Debt'],['allocations','Allocations']] as [View,string][]).map(([v,l]) => (
               <button key={v} className={`nav-view ${view===v?'active':''}`} onClick={() => setView(v)}>{l}{v==='ready'&&readyCount>0?` (${readyCount})`:''}{v==='invoiced'&&invoicedCount>0?` (${invoicedCount})`:''}</button>
             ))}
           </div>
@@ -562,8 +561,8 @@ export default function App() {
         <div className="table-wrap">
           <table>
             <colgroup>
-              <col style={{ width: 48 }} />
-              <col style={{ width: 48 }} />
+              <col style={{ width: 64 }} />
+              <col style={{ width: 64 }} />
               <col style={{ width: 80 }} />
               <col style={{ width: 70 }} />
               <col style={{ width: 140 }} />
