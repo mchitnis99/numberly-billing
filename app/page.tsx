@@ -426,7 +426,7 @@ export default function App() {
         .scroll-hint { display: flex; align-items: center; gap: 4px; font-size: 11px; color: var(--text3); margin-bottom: 4px; }
         table { width: 100%; border-collapse: collapse; font-size: 12px; min-width: 1250px; table-layout: fixed; }
         thead { position: sticky; top: 0; z-index: 5; }
-        th { background: #f0eff8; font-weight: 600; color: #4a4870; padding: 7px 10px; text-align: left; border-bottom: 1px solid rgba(83,74,183,0.15); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; white-space: nowrap; cursor: pointer; user-select: none; overflow: hidden; text-overflow: ellipsis; }
+        th { background: #f0eff8; font-weight: 600; color: #4a4870; padding: 7px 10px; text-align: left; border-bottom: 1px solid rgba(83,74,183,0.15); font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; white-space: normal; word-break: break-word; line-height: 1.2; cursor: pointer; user-select: none; vertical-align: bottom; }
         @media (prefers-color-scheme: dark) { th { background: #1e1e2e; color: #a0a0c0; border-bottom-color: rgba(160,160,192,0.15); } }
         th:hover { color: #534AB7; }
         th.sorted { color: #534AB7; }
@@ -561,20 +561,20 @@ export default function App() {
         <div className="table-wrap">
           <table>
             <colgroup>
-              <col style={{ width: 64 }} />
-              <col style={{ width: 64 }} />
+              <col style={{ width: 56 }} />
+              <col style={{ width: 56 }} />
+              <col style={{ width: 90 }} />
               <col style={{ width: 80 }} />
-              <col style={{ width: 70 }} />
-              <col style={{ width: 140 }} />
-              <col style={{ width: 140 }} />
-              <col style={{ width: 55 }} />
-              <col style={{ width: 120 }} />
+              <col style={{ width: 130 }} />
+              <col style={{ width: 150 }} />
+              <col style={{ width: 60 }} />
+              <col style={{ width: 130 }} />
               <col style={{ width: 90 }} />
-              <col style={{ width: 90 }} />
+              <col style={{ width: 100 }} />
               <col style={{ width: 110 }} />
               <col style={{ width: 90 }} />
               <col style={{ width: 90 }} />
-              <col style={{ width: 64 }} />
+              <col style={{ width: 70 }} />
             </colgroup>
             <thead>
               <tr>
