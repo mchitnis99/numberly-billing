@@ -10,7 +10,7 @@ import { ChartsView } from './components/ChartsView'
 import { AllocationsView } from './components/AllocationsView'
 
 type SortKey = 'month' | 'client' | 'amount' | 'balance' | 'status' | 'date' | 'readyForBilling'
-type View = 'all' | 'outstanding' | 'ready' | 'invoiced' | 'paid' | 'bad-debt' | 'charts' | 'allocations'
+type View = 'active' | 'outstanding' | 'ready' | 'invoiced' | 'paid' | 'bad-debt' | 'charts' | 'allocations'
 
 const MONTH_ORDER = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 const MONTH_OPTIONS: string[] = []
@@ -109,7 +109,7 @@ export default function App() {
   }, [])
 
   const [projects, setProjects] = useState<Project[]>([])
-  const [view, setView] = useState<View>('all')
+  const [view, setView] = useState<View>('active')
   const [sortKey, setSortKey] = useState<SortKey>('month')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const [search, setSearch] = useState('')
@@ -121,6 +121,7 @@ export default function App() {
   const [stripeLoading, setStripeLoading] = useState<number | null>(null)
   const [stripeMsg, setStripeMsg] = useState<Record<number, { type: 'link' | 'error'; text: string; url?: string }>>({})
   const [statusFilter, setStatusFilter] = useState('')
+  const [allocFilter, setAllocFilter] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
   const fileRef = useRef<HTMLInputElement>(null)
@@ -278,15 +279,17 @@ export default function App() {
     const s = search.toLowerCase()
     const matchSearch = !s || p.startup.toLowerCase().includes(s) || p.contact.toLowerCase().includes(s) || p.month.toLowerCase().includes(s) || p.channel.toLowerCase().includes(s) || p.description.toLowerCase().includes(s)
     const status = paymentStatus(p)
-    const matchView = view === 'all' ? true :
+    const ps = pipelineStatus(p)
+    const matchView = view === 'active' ? ps !== 'Fully Paid' && !p.badDebt :
       view === 'outstanding' ? (remainingBalance(p) > 0 && !p.badDebt) :
       view === 'ready' ? p.readyForBilling :
-      view === 'invoiced' ? (!!(p.invoicedAt && p.invoicedAt.length > 0) && status !== 'Fully paid') :
-      view === 'paid' ? status === 'Fully paid' :
+      view === 'invoiced' ? (!!(p.invoicedAt && p.invoicedAt.length > 0) && ps !== 'Fully Paid') :
+      view === 'paid' ? ps === 'Fully Paid' :
       view === 'bad-debt' ? p.badDebt : true
-    const matchStatus = !statusFilter || pipelineStatus(p) === statusFilter
-    return matchSearch && matchView && matchStatus
-  }), [projects, view, search, statusFilter])
+    const matchStatus = !statusFilter || ps === statusFilter
+    const matchAlloc = allocFilter.size === 0 || [...allocFilter].some(k => (p.alloc[k as keyof Allocation] ?? 0) > 0)
+    return matchSearch && matchView && matchStatus && matchAlloc
+  }), [projects, view, search, statusFilter, allocFilter])
 
   // Sorting
   const sorted = useMemo(() => {
@@ -491,7 +494,7 @@ export default function App() {
         <div className="nav-inner">
           <span className="nav-brand">Numberly Billing</span>
           <div className="nav-views">
-            {([['charts','Charts'],['all','All'],['ready','Ready to bill'],['outstanding','Outstanding'],['invoiced','Invoiced'],['paid','Paid'],['bad-debt','Bad Debt'],['allocations','Allocations']] as [View,string][]).map(([v,l]) => (
+            {([['charts','Charts'],['active','Active'],['ready','Ready to bill'],['outstanding','Outstanding'],['invoiced','Invoiced'],['paid','Paid'],['bad-debt','Bad Debt'],['allocations','Allocations']] as [View,string][]).map(([v,l]) => (
               <button key={v} className={`nav-view ${view===v?'active':''}`} onClick={() => setView(v)}>{l}{v==='ready'&&readyCount>0?` (${readyCount})`:''}{v==='invoiced'&&invoicedCount>0?` (${invoicedCount})`:''}</button>
             ))}
           </div>
@@ -541,8 +544,14 @@ export default function App() {
             <option>Fully Paid</option>
             <option>Bad Debt</option>
           </select>
+          {([['J','#534AB7'],['M','#1D9E75'],['G','#378ADD']] as [string,string][]).map(([k,color]) => (
+            <button key={k} onClick={() => setAllocFilter(prev => { const n = new Set(prev); n.has(k) ? n.delete(k) : n.add(k); return n })}
+              style={{ padding: '3px 10px', borderRadius: 'var(--radius)', border: `1px solid ${color}`, background: allocFilter.has(k) ? color : 'transparent', color: allocFilter.has(k) ? '#fff' : color, fontSize: 11, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s' }}>
+              {k}
+            </button>
+          ))}
           <span style={{ fontSize: 11, color: 'var(--text3)' }}>{sorted.length} project{sorted.length !== 1 ? 's' : ''}</span>
-          {(search || statusFilter) && <button className="btn" onClick={() => { setSearch(''); setStatusFilter('') }}>Clear</button>}
+          {(search || statusFilter || allocFilter.size > 0) && <button className="btn" onClick={() => { setSearch(''); setStatusFilter(''); setAllocFilter(new Set()) }}>Clear</button>}
         </div>
         )}
 

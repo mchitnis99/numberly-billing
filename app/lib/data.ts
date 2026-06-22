@@ -249,7 +249,8 @@ export function pipelineStatus(p: Project): string {
 }
 
 export function remainingBalance(p: Project): number {
-  if (p.importedData && p.importedBalance > 0) return p.importedBalance
+  const hasManualPayment = p.invoices.some(inv => invIsPaid(inv))
+  if (p.importedData && p.importedBalance > 0 && !hasManualPayment) return p.importedBalance
   const paid = p.invoices.reduce((s, inv) => s + (invIsPaid(inv) ? inv.amt : 0), 0)
   return Math.max(0, p.amount - paid)
 }
