@@ -68,17 +68,28 @@ const darkTooltip: React.CSSProperties = {
 
 export function ChartsView({ projects }: { projects: Project[] }) {
   // Monthly booked vs collected — all months with data, sorted chronologically
-  const monthMap: Record<string, { Booked: number; Collected: number }> = {}
+  const allDeliveryTypes = [...new Set(projects.map(p => (p.delivery ?? '').trim()).filter(Boolean))].sort()
+
+  const monthMap: Record<string, { Booked: number; Collected: number; byDelivery: Record<string, number> }> = {}
   projects.forEach(p => {
     const m = normalizeMonth(p.month)
     if (!m) return
-    if (!monthMap[m]) monthMap[m] = { Booked: 0, Collected: 0 }
+    if (!monthMap[m]) monthMap[m] = { Booked: 0, Collected: 0, byDelivery: {} }
     monthMap[m].Booked += p.amount
     monthMap[m].Collected += totalNetReceived(p)
+    const d = (p.delivery ?? '').trim()
+    if (d) monthMap[m].byDelivery[d] = (monthMap[m].byDelivery[d] || 0) + p.amount
   })
   const monthlyData = Object.entries(monthMap)
     .map(([month, vals]) => ({ month, ...vals }))
     .sort((a, b) => monthToNum(a.month) - monthToNum(b.month))
+
+  const monthlyTotals = monthlyData.reduce((acc, row) => {
+    acc.Booked += row.Booked
+    acc.Collected += row.Collected
+    allDeliveryTypes.forEach(d => { acc.byDelivery[d] = (acc.byDelivery[d] || 0) + (row.byDelivery[d] || 0) })
+    return acc
+  }, { Booked: 0, Collected: 0, byDelivery: {} as Record<string, number> })
 
   // Annual — booked and collected per year
   const annualMap: Record<string, { Booked: number; Collected: number }> = {}
@@ -119,17 +130,69 @@ export function ChartsView({ projects }: { projects: Project[] }) {
 
       <div>
         <div style={sectionLabel}>Monthly Booked vs Collected</div>
-        <ResponsiveContainer width="100%" height={280}>
-          <BarChart data={monthlyData} margin={{ top: 4, right: 16, bottom: 52, left: 56 }} barGap={2} barCategoryGap="30%">
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
-            <XAxis dataKey="month" angle={-45} textAnchor="end" tick={{ fontSize: 10, fill: 'var(--text2)' }} interval={0} />
-            <YAxis tickFormatter={tickFmt} tick={{ fontSize: 10, fill: 'var(--text2)' }} axisLine={false} tickLine={false} />
-            <Tooltip formatter={(v, name) => [fmt(v as number), name]} cursor={{ fill: 'rgba(255,255,255,0.04)' }} contentStyle={darkTooltip} />
-            <Legend wrapperStyle={{ fontSize: 11, paddingTop: 48 }} />
-            <Bar dataKey="Booked" fill="#534AB7" radius={[3, 3, 0, 0]} background={{ fill: 'transparent' }} />
-            <Bar dataKey="Collected" fill="#1D9E75" radius={[3, 3, 0, 0]} background={{ fill: 'transparent' }} />
-          </BarChart>
-        </ResponsiveContainer>
+        <div style={{ display: 'flex', gap: '1.5rem', alignItems: 'stretch' }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <ResponsiveContainer width="100%" height={280}>
+              <BarChart data={monthlyData} margin={{ top: 4, right: 16, bottom: 52, left: 56 }} barGap={2} barCategoryGap="30%">
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
+                <XAxis dataKey="month" angle={-45} textAnchor="end" tick={{ fontSize: 10, fill: 'var(--text2)' }} interval={0} />
+                <YAxis tickFormatter={tickFmt} tick={{ fontSize: 10, fill: 'var(--text2)' }} axisLine={false} tickLine={false} />
+                <Tooltip formatter={(v, name) => [fmt(v as number), name]} cursor={{ fill: 'rgba(255,255,255,0.04)' }} contentStyle={darkTooltip} />
+                <Legend wrapperStyle={{ fontSize: 11, paddingTop: 48 }} />
+                <Bar dataKey="Booked" fill="#534AB7" radius={[3, 3, 0, 0]} background={{ fill: 'transparent' }} />
+                <Bar dataKey="Collected" fill="#1D9E75" radius={[3, 3, 0, 0]} background={{ fill: 'transparent' }} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="table-wrap" style={{ height: 280, overflow: 'auto' }}>
+              <table style={{ minWidth: 'auto', tableLayout: 'auto' }}>
+                <thead>
+                  <tr>
+                    <th>Month</th>
+                    <th>Booked</th>
+                    <th>Collected</th>
+                    <th>Variance</th>
+                    {allDeliveryTypes.map(d => <th key={d}>{d}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {monthlyData.length === 0
+                    ? <tr><td colSpan={4 + allDeliveryTypes.length}>No data</td></tr>
+                    : monthlyData.map(row => {
+                      const variance = row.Booked - row.Collected
+                      return (
+                        <tr key={row.month}>
+                          <td>{row.month}</td>
+                          <td className="amt">{fmt(row.Booked)}</td>
+                          <td className="amt">{fmt(row.Collected)}</td>
+                          <td className="amt" style={{ color: variance < 0 ? 'var(--red)' : 'var(--text3)' }}>{fmt(variance)}</td>
+                          {allDeliveryTypes.map(d => (
+                            <td key={d} className="amt">{fmt(row.byDelivery[d] || 0)}</td>
+                          ))}
+                        </tr>
+                      )
+                    })}
+                </tbody>
+                {monthlyData.length > 0 && (
+                  <tfoot>
+                    <tr>
+                      <td style={{ fontWeight: 600 }}>Total</td>
+                      <td className="amt" style={{ fontWeight: 600 }}>{fmt(monthlyTotals.Booked)}</td>
+                      <td className="amt" style={{ fontWeight: 600 }}>{fmt(monthlyTotals.Collected)}</td>
+                      <td className="amt" style={{ fontWeight: 600, color: (monthlyTotals.Booked - monthlyTotals.Collected) < 0 ? 'var(--red)' : 'var(--text3)' }}>
+                        {fmt(monthlyTotals.Booked - monthlyTotals.Collected)}
+                      </td>
+                      {allDeliveryTypes.map(d => (
+                        <td key={d} className="amt" style={{ fontWeight: 600 }}>{fmt(monthlyTotals.byDelivery[d] || 0)}</td>
+                      ))}
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Annual Booked + Collected side by side */}
