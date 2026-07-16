@@ -76,14 +76,19 @@ export function ChartsView({ projects }: { projects: Project[] }) {
     const m = normalizeMonth(p.month)
     if (!m) return
     if (!monthMap[m]) monthMap[m] = { Booked: 0, Collected: 0, byMember: { J: 0, M: 0, G: 0 } }
-    const net = totalNetReceived(p)
     monthMap[m].Booked += p.amount
-    monthMap[m].Collected += net
-    MEMBERS.forEach(k => { monthMap[m].byMember[k] += net * (p.alloc[k] || 0) / 100 })
+    monthMap[m].Collected += totalNetReceived(p)
+    MEMBERS.forEach(k => { monthMap[m].byMember[k] += p.amount * (p.alloc[k] || 0) / 100 })
   })
   const monthlyData = Object.entries(monthMap)
     .map(([month, vals]) => ({ month, ...vals }))
     .sort((a, b) => monthToNum(a.month) - monthToNum(b.month))
+
+  // Chart shouldn't render a Collected bar for pre-2026 months — data isn't final yet
+  const monthlyChartData = monthlyData.map(row => ({
+    ...row,
+    Collected: monthToNum(row.month) >= 2026 * 100 ? row.Collected : null,
+  }))
 
   const monthlyTotals = monthlyData.reduce((acc, row) => {
     acc.Booked += row.Booked
@@ -132,7 +137,7 @@ export function ChartsView({ projects }: { projects: Project[] }) {
       <div>
         <div style={sectionLabel}>Monthly Booked vs Collected</div>
         <ResponsiveContainer width="100%" height={280}>
-          <BarChart data={monthlyData} margin={{ top: 4, right: 16, bottom: 52, left: 56 }} barGap={2} barCategoryGap="30%">
+          <BarChart data={monthlyChartData} margin={{ top: 4, right: 16, bottom: 52, left: 56 }} barGap={2} barCategoryGap="30%">
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--border)" />
             <XAxis dataKey="month" angle={-45} textAnchor="end" tick={{ fontSize: 10, fill: 'var(--text2)' }} interval={0} />
             <YAxis tickFormatter={tickFmt} tick={{ fontSize: 10, fill: 'var(--text2)' }} axisLine={false} tickLine={false} />
@@ -159,16 +164,17 @@ export function ChartsView({ projects }: { projects: Project[] }) {
               {monthlyData.length === 0
                 ? <tr><td colSpan={7}>No data</td></tr>
                 : monthlyData.map(row => {
+                  const isFinal = monthToNum(row.month) >= 2026 * 100
                   const variance = row.Booked - row.Collected
                   return (
                     <tr key={row.month}>
                       <td>{row.month}</td>
                       <td className="amt">{fmt(row.Booked)}</td>
-                      <td className="amt">{fmt(row.Collected)}</td>
-                      <td className="amt" style={{ color: variance < 0 ? 'var(--red)' : 'var(--text3)' }}>{fmt(variance)}</td>
+                      <td className="amt">{isFinal ? fmt(row.Collected) : '—'}</td>
+                      <td className="amt" style={{ color: isFinal && variance < 0 ? 'var(--red)' : 'var(--text3)' }}>{isFinal ? fmt(variance) : '—'}</td>
                       {MEMBERS.map(k => (
                         <td key={k} className="amt">
-                          {row.Collected > 0 ? Math.round(row.byMember[k] / row.Collected * 100) + '%' : '—'}
+                          {row.Booked > 0 ? Math.round(row.byMember[k] / row.Booked * 100) + '%' : '—'}
                         </td>
                       ))}
                     </tr>
@@ -186,7 +192,7 @@ export function ChartsView({ projects }: { projects: Project[] }) {
                   </td>
                   {MEMBERS.map(k => (
                     <td key={k} className="amt" style={{ fontWeight: 600 }}>
-                      {monthlyTotals.Collected > 0 ? Math.round(monthlyTotals.byMember[k] / monthlyTotals.Collected * 100) + '%' : '—'}
+                      {monthlyTotals.Booked > 0 ? Math.round(monthlyTotals.byMember[k] / monthlyTotals.Booked * 100) + '%' : '—'}
                     </td>
                   ))}
                 </tr>
