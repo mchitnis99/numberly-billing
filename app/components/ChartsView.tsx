@@ -78,7 +78,8 @@ export function ChartsView({ projects }: { projects: Project[] }) {
     if (!monthMap[m]) monthMap[m] = { Booked: 0, Collected: 0, byMember: { J: 0, M: 0, G: 0 } }
     monthMap[m].Booked += p.amount
     monthMap[m].Collected += totalNetReceived(p)
-    MEMBERS.forEach(k => { monthMap[m].byMember[k] += p.amount * (p.alloc[k] || 0) / 100 })
+    const soldBy = p.soldBy?.toUpperCase()
+    MEMBERS.forEach(k => { if (soldBy === k) monthMap[m].byMember[k] += p.amount })
   })
   const monthlyData = Object.entries(monthMap)
     .map(([month, vals]) => ({ month, ...vals }))
