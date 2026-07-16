@@ -8,9 +8,10 @@ import {
 import { AllocBar } from './components/AllocBar'
 import { ChartsView } from './components/ChartsView'
 import { AllocationsView } from './components/AllocationsView'
+import { ImportUpworkView } from './components/ImportUpworkView'
 
 type SortKey = 'month' | 'client' | 'amount' | 'balance' | 'status' | 'date' | 'readyForBilling'
-type View = 'active' | 'outstanding' | 'ready' | 'invoiced' | 'paid' | 'bad-debt' | 'charts' | 'allocations'
+type View = 'active' | 'outstanding' | 'ready' | 'invoiced' | 'paid' | 'bad-debt' | 'charts' | 'allocations' | 'import-upwork'
 
 const MONTH_ORDER = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 const MONTH_OPTIONS: string[] = []
@@ -494,7 +495,7 @@ export default function App() {
         <div className="nav-inner">
           <span className="nav-brand">Numberly Billing</span>
           <div className="nav-views">
-            {([['charts','Charts'],['active','Active'],['ready','Ready to bill'],['outstanding','Outstanding'],['invoiced','Invoiced'],['paid','Paid'],['bad-debt','Bad Debt'],['allocations','Allocations']] as [View,string][]).map(([v,l]) => (
+            {([['charts','Charts'],['active','Active'],['ready','Ready to bill'],['outstanding','Outstanding'],['invoiced','Invoiced'],['paid','Paid'],['bad-debt','Bad Debt'],['allocations','Allocations'],['import-upwork','Import Upwork']] as [View,string][]).map(([v,l]) => (
               <button key={v} className={`nav-view ${view===v?'active':''}`} onClick={() => setView(v)}>{l}{v==='ready'&&readyCount>0?` (${readyCount})`:''}{v==='invoiced'&&invoicedCount>0?` (${invoicedCount})`:''}</button>
             ))}
           </div>
@@ -529,7 +530,7 @@ export default function App() {
           </div>
         )}
 
-        {view !== 'charts' && view !== 'allocations' && (
+        {view !== 'charts' && view !== 'allocations' && view !== 'import-upwork' && (
         <div className="toolbar">
           <input type="text" placeholder="Search client, contact, month, description..." value={search} onChange={e => setSearch(e.target.value)} />
           <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
@@ -556,7 +557,8 @@ export default function App() {
         )}
 
         {view === 'charts' ? <ChartsView projects={projects} /> :
-         view === 'allocations' ? <AllocationsView projects={projects} /> : (<>
+         view === 'allocations' ? <AllocationsView projects={projects} /> :
+         view === 'import-upwork' ? <ImportUpworkView projects={projects} setProjects={setProjects} /> : (<>
         <div className="scroll-hint">↔ Scroll horizontally to see all columns</div>
         <div className="table-wrap">
           <table>
