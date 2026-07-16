@@ -286,6 +286,23 @@ export default function App() {
     reader.readAsText(file)
   }
 
+  // Only one import panel/view is ever mounted at a time — switching between them via the
+  // dropdown fully closes/unmounts whichever one doesn't apply, rather than just hiding it.
+  function openHistoricImport() {
+    setShowImportMenu(false)
+    setView(v => (v === 'import-upwork' || v === 'import-stripe') ? 'active' : v)
+    setImportMsg('')
+    setShowImport(true)
+  }
+
+  function openImportView(v: 'import-upwork' | 'import-stripe') {
+    setShowImportMenu(false)
+    setShowImport(false)
+    setImportMsg('')
+    if (fileRef.current) fileRef.current.value = ''
+    setView(v)
+  }
+
   // Filtering
   const filtered = useMemo(() => projects.filter(p => {
     const s = search.toLowerCase()
@@ -519,9 +536,9 @@ export default function App() {
               <button className="btn" onClick={() => setShowImportMenu(s => !s)}>⬆ Import ▾</button>
               {showImportMenu && (
                 <div className="import-menu-dropdown">
-                  <button className="import-menu-item" onClick={() => { setShowImport(true); setShowImportMenu(false) }}>Import Historic Data</button>
-                  <button className="import-menu-item" onClick={() => { setView('import-upwork'); setShowImportMenu(false) }}>Import UW</button>
-                  <button className="import-menu-item" onClick={() => { setView('import-stripe'); setShowImportMenu(false) }}>Import Stripe</button>
+                  <button className="import-menu-item" onClick={openHistoricImport}>Import Historic Data</button>
+                  <button className="import-menu-item" onClick={() => openImportView('import-upwork')}>Import UW</button>
+                  <button className="import-menu-item" onClick={() => openImportView('import-stripe')}>Import Stripe</button>
                 </div>
               )}
             </div>
