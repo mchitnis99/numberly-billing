@@ -5,8 +5,8 @@ import {
 } from 'recharts'
 import { Project, totalNetReceived, fmt } from '../lib/data'
 
-type MemberKey = 'J' | 'M' | 'G'
-const MEMBERS: MemberKey[] = ['J', 'M', 'G']
+type MemberKey = 'J' | 'M'
+const MEMBERS: MemberKey[] = ['J', 'M']
 
 const MONTH_ORDER = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 
@@ -75,7 +75,7 @@ export function ChartsView({ projects }: { projects: Project[] }) {
   projects.forEach(p => {
     const m = normalizeMonth(p.month)
     if (!m) return
-    if (!monthMap[m]) monthMap[m] = { Booked: 0, Collected: 0, byMember: { J: 0, M: 0, G: 0 } }
+    if (!monthMap[m]) monthMap[m] = { Booked: 0, Collected: 0, byMember: { J: 0, M: 0 } }
     monthMap[m].Booked += p.amount
     monthMap[m].Collected += totalNetReceived(p)
     const soldBy = p.soldBy?.toUpperCase()
@@ -85,18 +85,61 @@ export function ChartsView({ projects }: { projects: Project[] }) {
     .map(([month, vals]) => ({ month, ...vals }))
     .sort((a, b) => monthToNum(a.month) - monthToNum(b.month))
 
-  // Chart shouldn't render a Collected bar for pre-2026 months — data isn't final yet
-  const monthlyChartData = monthlyData.map(row => ({
-    ...row,
-    Collected: monthToNum(row.month) >= 2026 * 100 ? row.Collected : null,
-  }))
+  const months2025 = monthlyData.filter(r => monthToNum(r.month) < 2026 * 100)
+  const months2026 = monthlyData.filter(r => monthToNum(r.month) >= 2026 * 100)
 
-  const monthlyTotals = monthlyData.reduce((acc, row) => {
-    acc.Booked += row.Booked
-    acc.Collected += row.Collected
-    MEMBERS.forEach(k => { acc.byMember[k] += row.byMember[k] })
+  const sumRows = (rows: typeof monthlyData) => rows.reduce((acc, r) => {
+    acc.Booked += r.Booked
+    acc.Collected += r.Collected
+    MEMBERS.forEach(k => { acc.byMember[k] += r.byMember[k] })
     return acc
-  }, { Booked: 0, Collected: 0, byMember: { J: 0, M: 0, G: 0 } as Record<MemberKey, number> })
+  }, { Booked: 0, Collected: 0, byMember: { J: 0, M: 0 } as Record<MemberKey, number> })
+
+  const sum2025 = sumRows(months2025)
+  const sum2026 = sumRows(months2026)
+  const pctOf = (byMember: Record<MemberKey, number>, booked: number, k: MemberKey) =>
+    booked > 0 ? byMember[k] / booked * 100 : null
+
+  // Chart: 2025 months collapse into a single "2025 Avg" bar (no Collected bar), 2026 stays monthly, chronological
+  const monthlyChartData = [
+    ...(months2025.length > 0 ? [{ month: '2025 Avg', Booked: sum2025.Booked / 12, Collected: null as number | null }] : []),
+    ...months2026.map(r => ({ month: r.month, Booked: r.Booked, Collected: r.Collected as number | null })),
+  ]
+
+  // Table: 2026 months descending (most recent first), then a single "2025 Avg" row, then totals
+  const tableRows = [
+    ...[...months2026].sort((a, b) => monthToNum(b.month) - monthToNum(a.month)).map(r => ({
+      month: r.month,
+      Booked: r.Booked,
+      Collected: r.Collected as number | null,
+      jPct: pctOf(r.byMember, r.Booked, 'J'),
+      mPct: pctOf(r.byMember, r.Booked, 'M'),
+    })),
+    ...(months2025.length > 0 ? [{
+      month: '2025 Avg',
+      Booked: sum2025.Booked / 12,
+      Collected: null as number | null,
+      jPct: pctOf(sum2025.byMember, sum2025.Booked, 'J'),
+      mPct: pctOf(sum2025.byMember, sum2025.Booked, 'M'),
+    }] : []),
+  ]
+
+  const total2026 = {
+    label: '2026 Total',
+    Booked: sum2026.Booked,
+    Collected: sum2026.Collected as number | null,
+    jPct: pctOf(sum2026.byMember, sum2026.Booked, 'J'),
+    mPct: pctOf(sum2026.byMember, sum2026.Booked, 'M'),
+  }
+  const fullBooked = sum2025.Booked + sum2026.Booked
+  const fullByMember: Record<MemberKey, number> = { J: sum2025.byMember.J + sum2026.byMember.J, M: sum2025.byMember.M + sum2026.byMember.M }
+  const totalAll = {
+    label: '2025-2026 Total',
+    Booked: fullBooked,
+    Collected: sum2026.Collected as number | null, // 2025 has no Collected data yet
+    jPct: pctOf(fullByMember, fullBooked, 'J'),
+    mPct: pctOf(fullByMember, fullBooked, 'M'),
+  }
 
   // Annual — booked and collected per year
   const annualMap: Record<string, { Booked: number; Collected: number }> = {}
@@ -155,48 +198,45 @@ export function ChartsView({ projects }: { projects: Project[] }) {
                 <th>Month</th>
                 <th>Booked</th>
                 <th>Collected</th>
-                <th>Variance</th>
+                <th>Pending</th>
                 <th>J%</th>
                 <th>M%</th>
-                <th>G%</th>
               </tr>
             </thead>
             <tbody>
-              {monthlyData.length === 0
-                ? <tr><td colSpan={7}>No data</td></tr>
-                : monthlyData.map(row => {
-                  const isFinal = monthToNum(row.month) >= 2026 * 100
-                  const variance = row.Booked - row.Collected
+              {tableRows.length === 0
+                ? <tr><td colSpan={6}>No data</td></tr>
+                : tableRows.map(row => {
+                  const pending = row.Collected !== null ? row.Booked - row.Collected : null
                   return (
                     <tr key={row.month}>
                       <td>{row.month}</td>
                       <td className="amt">{fmt(row.Booked)}</td>
-                      <td className="amt">{isFinal ? fmt(row.Collected) : '—'}</td>
-                      <td className="amt" style={{ color: isFinal && variance < 0 ? 'var(--red)' : 'var(--text3)' }}>{isFinal ? fmt(variance) : '—'}</td>
-                      {MEMBERS.map(k => (
-                        <td key={k} className="amt">
-                          {row.Booked > 0 ? Math.round(row.byMember[k] / row.Booked * 100) + '%' : '—'}
-                        </td>
-                      ))}
+                      <td className="amt">{row.Collected !== null ? fmt(row.Collected) : '—'}</td>
+                      <td className="amt" style={{ color: pending !== null && pending < 0 ? 'var(--red)' : 'var(--text3)' }}>{pending !== null ? fmt(pending) : '—'}</td>
+                      <td className="amt">{row.jPct !== null ? Math.round(row.jPct) + '%' : '—'}</td>
+                      <td className="amt">{row.mPct !== null ? Math.round(row.mPct) + '%' : '—'}</td>
                     </tr>
                   )
                 })}
             </tbody>
-            {monthlyData.length > 0 && (
+            {tableRows.length > 0 && (
               <tfoot>
-                <tr>
-                  <td style={{ fontWeight: 600 }}>Total</td>
-                  <td className="amt" style={{ fontWeight: 600 }}>{fmt(monthlyTotals.Booked)}</td>
-                  <td className="amt" style={{ fontWeight: 600 }}>{fmt(monthlyTotals.Collected)}</td>
-                  <td className="amt" style={{ fontWeight: 600, color: (monthlyTotals.Booked - monthlyTotals.Collected) < 0 ? 'var(--red)' : 'var(--text3)' }}>
-                    {fmt(monthlyTotals.Booked - monthlyTotals.Collected)}
-                  </td>
-                  {MEMBERS.map(k => (
-                    <td key={k} className="amt" style={{ fontWeight: 600 }}>
-                      {monthlyTotals.Booked > 0 ? Math.round(monthlyTotals.byMember[k] / monthlyTotals.Booked * 100) + '%' : '—'}
-                    </td>
-                  ))}
-                </tr>
+                {[total2026, totalAll].map(t => {
+                  const pending = t.Collected !== null ? t.Booked - t.Collected : null
+                  return (
+                    <tr key={t.label}>
+                      <td style={{ fontWeight: 600 }}>{t.label}</td>
+                      <td className="amt" style={{ fontWeight: 600 }}>{fmt(t.Booked)}</td>
+                      <td className="amt" style={{ fontWeight: 600 }}>{t.Collected !== null ? fmt(t.Collected) : '—'}</td>
+                      <td className="amt" style={{ fontWeight: 600, color: pending !== null && pending < 0 ? 'var(--red)' : 'var(--text3)' }}>
+                        {pending !== null ? fmt(pending) : '—'}
+                      </td>
+                      <td className="amt" style={{ fontWeight: 600 }}>{t.jPct !== null ? Math.round(t.jPct) + '%' : '—'}</td>
+                      <td className="amt" style={{ fontWeight: 600 }}>{t.mPct !== null ? Math.round(t.mPct) + '%' : '—'}</td>
+                    </tr>
+                  )
+                })}
               </tfoot>
             )}
           </table>
