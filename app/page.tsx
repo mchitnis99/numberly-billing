@@ -11,7 +11,7 @@ import { AllocationsView } from './components/AllocationsView'
 import { ImportUpworkView } from './components/ImportUpworkView'
 
 type SortKey = 'month' | 'client' | 'amount' | 'balance' | 'status' | 'date' | 'readyForBilling'
-type View = 'active' | 'outstanding' | 'ready' | 'invoiced' | 'paid' | 'bad-debt' | 'charts' | 'allocations' | 'import-upwork'
+type View = 'active' | 'outstanding' | 'ready' | 'invoiced' | 'paid' | 'bad-debt' | 'charts' | 'allocations' | 'import-upwork' | 'import-stripe'
 
 const MONTH_ORDER = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
 const MONTH_OPTIONS: string[] = []
@@ -118,6 +118,8 @@ export default function App() {
   const [detailId, setDetailId] = useState<number | null>(null)
   const [showImport, setShowImport] = useState(false)
   const [importMsg, setImportMsg] = useState('')
+  const [showImportMenu, setShowImportMenu] = useState(false)
+  const importMenuRef = useRef<HTMLDivElement>(null)
   const [showAddRow, setShowAddRow] = useState(false)
   const [stripeLoading, setStripeLoading] = useState<number | null>(null)
   const [stripeMsg, setStripeMsg] = useState<Record<number, { type: 'link' | 'error'; text: string; url?: string }>>({})
@@ -149,6 +151,15 @@ export default function App() {
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [])
+
+  useEffect(() => {
+    if (!showImportMenu) return
+    function onDocClick(e: MouseEvent) {
+      if (importMenuRef.current && !importMenuRef.current.contains(e.target as Node)) setShowImportMenu(false)
+    }
+    document.addEventListener('mousedown', onDocClick)
+    return () => document.removeEventListener('mousedown', onDocClick)
+  }, [showImportMenu])
 
   // Updates a single project locally and persists just that row to Supabase
   const mutateProject = useCallback((id: number, updater: (p: Project) => Project) => {
@@ -401,6 +412,10 @@ export default function App() {
         .nav-view:hover { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.9); }
         .nav-view.active { background: rgba(29,158,117,0.2); color: #fff; font-weight: 500; box-shadow: inset 0 -2px 0 #1D9E75; }
         .nav-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+        .import-menu { position: relative; }
+        .import-menu-dropdown { position: absolute; top: calc(100% + 4px); right: 0; min-width: 190px; background: var(--surface); border: 0.5px solid var(--border); border-radius: var(--radius); box-shadow: 0 4px 16px rgba(0,0,0,0.25); z-index: 40; overflow: hidden; padding: 4px; }
+        .import-menu-item { display: block; width: 100%; text-align: left; padding: 7px 10px; font-size: 12px; background: transparent; border: none; border-radius: 6px; color: var(--text); cursor: pointer; font-family: inherit; white-space: nowrap; }
+        .import-menu-item:hover { background: var(--surface2); }
         .wrap { max-width: 1400px; margin: 0 auto; padding: 0 1.25rem 3rem; }
         .metrics { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px,1fr)); gap: 8px; margin: 1rem 0; }
         .metric { background: var(--surface2); border-radius: var(--radius); padding: 0.75rem 1rem; border: 0.5px solid var(--border); }
@@ -495,12 +510,21 @@ export default function App() {
         <div className="nav-inner">
           <span className="nav-brand">Numberly Billing</span>
           <div className="nav-views">
-            {([['charts','Charts'],['active','Active'],['ready','Ready to bill'],['outstanding','Outstanding'],['invoiced','Invoiced'],['paid','Paid'],['bad-debt','Bad Debt'],['allocations','Allocations'],['import-upwork','Import Upwork']] as [View,string][]).map(([v,l]) => (
+            {([['charts','Charts'],['active','Active'],['ready','Ready to bill'],['outstanding','Outstanding'],['invoiced','Invoiced'],['paid','Paid'],['bad-debt','Bad Debt'],['allocations','Allocations']] as [View,string][]).map(([v,l]) => (
               <button key={v} className={`nav-view ${view===v?'active':''}`} onClick={() => setView(v)}>{l}{v==='ready'&&readyCount>0?` (${readyCount})`:''}{v==='invoiced'&&invoicedCount>0?` (${invoicedCount})`:''}</button>
             ))}
           </div>
           <div className="nav-actions">
-            <button className="btn" onClick={() => setShowImport(s => !s)}>⬆ Import CSV</button>
+            <div className="import-menu" ref={importMenuRef}>
+              <button className="btn" onClick={() => setShowImportMenu(s => !s)}>⬆ Import ▾</button>
+              {showImportMenu && (
+                <div className="import-menu-dropdown">
+                  <button className="import-menu-item" onClick={() => { setShowImport(true); setShowImportMenu(false) }}>Import Historic Data</button>
+                  <button className="import-menu-item" onClick={() => { setView('import-upwork'); setShowImportMenu(false) }}>Import UW</button>
+                  <button className="import-menu-item" onClick={() => { setView('import-stripe'); setShowImportMenu(false) }}>Import Stripe</button>
+                </div>
+              )}
+            </div>
             <button className="btn btn-primary" onClick={addProject}>+ Add project</button>
           </div>
         </div>
@@ -530,7 +554,7 @@ export default function App() {
           </div>
         )}
 
-        {view !== 'charts' && view !== 'allocations' && view !== 'import-upwork' && (
+        {view !== 'charts' && view !== 'allocations' && view !== 'import-upwork' && view !== 'import-stripe' && (
         <div className="toolbar">
           <input type="text" placeholder="Search client, contact, month, description..." value={search} onChange={e => setSearch(e.target.value)} />
           <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}
@@ -558,7 +582,12 @@ export default function App() {
 
         {view === 'charts' ? <ChartsView projects={projects} /> :
          view === 'allocations' ? <AllocationsView projects={projects} /> :
-         view === 'import-upwork' ? <ImportUpworkView projects={projects} setProjects={setProjects} /> : (<>
+         view === 'import-upwork' ? <ImportUpworkView projects={projects} setProjects={setProjects} /> :
+         view === 'import-stripe' ? (
+           <div style={{ padding: '3rem 1rem', textAlign: 'center', color: 'var(--text3)', fontSize: 13 }}>
+             Stripe import is coming soon.
+           </div>
+         ) : (<>
         <div className="scroll-hint">↔ Scroll horizontally to see all columns</div>
         <div className="table-wrap">
           <table>
