@@ -527,7 +527,7 @@ export default function App() {
         <div className="nav-inner">
           <span className="nav-brand">Numberly Billing</span>
           <div className="nav-views">
-            {([['charts','Charts'],['active','Active'],['ready','Ready to bill'],['outstanding','Outstanding'],['invoiced','Invoiced'],['paid','Paid'],['bad-debt','Bad Debt'],['allocations','Allocations']] as [View,string][]).map(([v,l]) => (
+            {([['charts','KPIs'],['active','Active'],['ready','Ready to bill'],['outstanding','Outstanding'],['invoiced','Invoiced'],['paid','Paid'],['allocations','Allocations']] as [View,string][]).map(([v,l]) => (
               <button key={v} className={`nav-view ${view===v?'active':''}`} onClick={() => setView(v)}>{l}{v==='ready'&&readyCount>0?` (${readyCount})`:''}{v==='invoiced'&&invoicedCount>0?` (${invoicedCount})`:''}</button>
             ))}
           </div>
@@ -928,11 +928,6 @@ export default function App() {
 
             <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '0.5px solid var(--border)', display: 'flex', gap: 8 }}>
               <button className="btn btn-danger" onClick={() => { if (confirm('Delete this project?')) deleteProject(detail.id) }}>Delete project</button>
-              <button
-                onClick={() => updateField(detail.id, 'badDebt', !detail.badDebt)}
-                style={{ padding: '4px 12px', borderRadius: 'var(--radius)', border: `1px solid ${detail.badDebt ? '#888' : '#8B0000'}`, background: detail.badDebt ? 'rgba(136,136,136,0.1)' : 'rgba(139,0,0,0.15)', color: detail.badDebt ? 'var(--text2)' : '#ff6b6b', fontSize: 12, cursor: 'pointer', fontFamily: 'inherit' }}>
-                {detail.badDebt ? 'Remove Bad Debt' : 'Mark as Bad Debt'}
-              </button>
             </div>
           </div>
         </div>

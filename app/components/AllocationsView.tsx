@@ -84,9 +84,10 @@ export function AllocationsView({ projects }: { projects: Project[] }) {
       const payout = payouts.find(p => p.member === key && p.month === month)?.amount || 0
       const payAvailable = running + cashEarned + devEarning
       const balance = payAvailable - payout
+      const revSharePct = sales > 0 ? revShare / sales * 100 : 0
       const pctCollected = revShare > 0 ? cashEarned / revShare * 100 : 0
       running = balance
-      return { month, sales, revShare, cashEarned, devEarning, payout, payAvailable, balance, pctCollected }
+      return { month, sales, revShare, revSharePct, cashEarned, devEarning, payout, payAvailable, balance, pctCollected }
     })
     const totalSales = rows.reduce((s, r) => s + r.sales, 0)
     const totalRevShare = rows.reduce((s, r) => s + r.revShare, 0)
@@ -210,18 +211,19 @@ export function AllocationsView({ projects }: { projects: Project[] }) {
                 </div>
 
                 <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
                     <thead>
                       <tr>
-                        <th>Month</th>
-                        <th style={{ textAlign: 'right' }}>Sales</th>
-                        <th style={{ textAlign: 'right' }}>Rev Share</th>
-                        <th style={{ textAlign: 'right' }}>% Collected</th>
-                        <th style={{ textAlign: 'right' }}>Cash Earned</th>
-                        <th style={{ textAlign: 'right' }}>Dev Earnings</th>
-                        <th style={{ textAlign: 'right' }}>Pay Available</th>
-                        <th style={{ textAlign: 'right' }}>Cash Paid Out</th>
-                        <th style={{ textAlign: 'right' }}>Balance</th>
+                        <th style={{ padding: '4px 6px' }}>Month</th>
+                        <th style={{ textAlign: 'right', padding: '4px 6px' }}>Sales</th>
+                        <th style={{ textAlign: 'right', padding: '4px 6px' }}>Rev Share</th>
+                        <th style={{ textAlign: 'right', padding: '4px 6px' }}>Rev Share %</th>
+                        <th style={{ textAlign: 'right', padding: '4px 6px' }}>$ Collected</th>
+                        <th style={{ textAlign: 'right', padding: '4px 6px' }}>% Collected</th>
+                        <th style={{ textAlign: 'right', padding: '4px 6px' }}>Dev Earnings</th>
+                        <th style={{ textAlign: 'right', padding: '4px 6px' }}>Pay Available</th>
+                        <th style={{ textAlign: 'right', padding: '4px 6px' }}>Cash Paid Out</th>
+                        <th style={{ textAlign: 'right', padding: '4px 6px' }}>Balance</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -230,37 +232,42 @@ export function AllocationsView({ projects }: { projects: Project[] }) {
                         const isEditPayout = editState?.member === key && editState?.month === r.month && editState?.field === 'payout'
                         return (
                           <tr key={r.month}>
-                            <td style={{ fontWeight: 500 }}>{r.month}</td>
+                            <td style={{ fontWeight: 500, padding: '3px 6px' }}>{r.month}</td>
 
                             {/* Sales */}
-                            <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: r.sales > 0 ? 'var(--text)' : 'var(--text3)' }}>
+                            <td style={{ textAlign: 'right', padding: '3px 6px', fontVariantNumeric: 'tabular-nums', color: r.sales > 0 ? 'var(--text)' : 'var(--text3)' }}>
                               {r.sales > 0 ? fmt(r.sales) : '—'}
                             </td>
 
                             {/* Rev Share — booked */}
-                            <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: r.revShare > 0 ? 'var(--text2)' : 'var(--text3)' }}>
+                            <td style={{ textAlign: 'right', padding: '3px 6px', fontVariantNumeric: 'tabular-nums', color: r.revShare > 0 ? 'var(--text2)' : 'var(--text3)' }}>
                               {r.revShare > 0 ? fmt(r.revShare) : '—'}
                             </td>
 
-                            {/* % Collected */}
-                            <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--text2)' }}>
-                              {r.pctCollected > 0 ? r.pctCollected.toFixed(0) + '%' : '—'}
+                            {/* Rev Share % */}
+                            <td style={{ textAlign: 'right', padding: '3px 6px', fontVariantNumeric: 'tabular-nums', color: 'var(--text2)' }}>
+                              {r.revSharePct > 0 ? r.revSharePct.toFixed(0) + '%' : '—'}
                             </td>
 
-                            {/* Cash Earned — collected */}
-                            <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: r.cashEarned > 0 ? ALLOC_COLORS[key] : 'var(--text3)' }}>
+                            {/* $ Collected — cash earned */}
+                            <td style={{ textAlign: 'right', padding: '3px 6px', fontVariantNumeric: 'tabular-nums', color: r.cashEarned > 0 ? ALLOC_COLORS[key] : 'var(--text3)' }}>
                               {r.cashEarned > 0 ? fmt(r.cashEarned) : '—'}
                             </td>
 
+                            {/* % Collected */}
+                            <td style={{ textAlign: 'right', padding: '3px 6px', fontVariantNumeric: 'tabular-nums', color: 'var(--text2)' }}>
+                              {r.pctCollected > 0 ? r.pctCollected.toFixed(0) + '%' : '—'}
+                            </td>
+
                             {/* Dev Earnings — editable */}
-                            <td style={{ textAlign: 'right' }}>
+                            <td style={{ textAlign: 'right', padding: '3px 6px' }}>
                               {isEditDev ? (
                                 <input autoFocus type="number" value={editValue}
                                   onChange={e => setEditValue(e.target.value)}
                                   onBlur={() => commitEdit(key, r.month, 'dev')}
                                   onKeyDown={e => { if (e.key === 'Enter') commitEdit(key, r.month, 'dev'); if (e.key === 'Escape') setEditState(null) }}
                                   className="pe-input"
-                                  style={{ width: 80, textAlign: 'right', fontSize: 11 }} />
+                                  style={{ width: 70, textAlign: 'right', fontSize: 11 }} />
                               ) : (
                                 <span onClick={() => startEdit(key, r.month, 'dev', r.devEarning)}
                                   title="Click to edit"
@@ -271,19 +278,19 @@ export function AllocationsView({ projects }: { projects: Project[] }) {
                             </td>
 
                             {/* Pay Available */}
-                            <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: r.payAvailable > 0 ? 'var(--text)' : 'var(--text3)' }}>
+                            <td style={{ textAlign: 'right', padding: '3px 6px', fontVariantNumeric: 'tabular-nums', color: r.payAvailable > 0 ? 'var(--text)' : 'var(--text3)' }}>
                               {r.payAvailable > 0 ? fmt(r.payAvailable) : '—'}
                             </td>
 
                             {/* Cash Paid Out — editable */}
-                            <td style={{ textAlign: 'right' }}>
+                            <td style={{ textAlign: 'right', padding: '3px 6px' }}>
                               {isEditPayout ? (
                                 <input autoFocus type="number" value={editValue}
                                   onChange={e => setEditValue(e.target.value)}
                                   onBlur={() => commitEdit(key, r.month, 'payout')}
                                   onKeyDown={e => { if (e.key === 'Enter') commitEdit(key, r.month, 'payout'); if (e.key === 'Escape') setEditState(null) }}
                                   className="pe-input"
-                                  style={{ width: 80, textAlign: 'right', fontSize: 11 }} />
+                                  style={{ width: 70, textAlign: 'right', fontSize: 11 }} />
                               ) : (
                                 <span onClick={() => startEdit(key, r.month, 'payout', r.payout)}
                                   title="Click to edit"
@@ -294,7 +301,7 @@ export function AllocationsView({ projects }: { projects: Project[] }) {
                             </td>
 
                             {/* Balance */}
-                            <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', fontWeight: 500, color: r.balance > 0 ? 'var(--amber)' : r.balance < 0 ? 'var(--red)' : 'var(--text3)' }}>
+                            <td style={{ textAlign: 'right', padding: '3px 6px', fontVariantNumeric: 'tabular-nums', fontWeight: 500, color: r.balance > 0 ? 'var(--amber)' : r.balance < 0 ? 'var(--red)' : 'var(--text3)' }}>
                               {r.balance !== 0 ? fmt(Math.abs(r.balance)) : '—'}
                             </td>
                           </tr>
@@ -304,15 +311,16 @@ export function AllocationsView({ projects }: { projects: Project[] }) {
                       {/* Total row */}
                       {rows.length > 0 && (
                         <tr style={{ borderTop: '1px solid var(--border2)', fontWeight: 600 }}>
-                          <td>Total</td>
-                          <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{totalSales > 0 ? fmt(totalSales) : '—'}</td>
-                          <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: 'var(--text2)' }}>{fmt(totalRevShare)}</td>
-                          <td></td>
-                          <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: ALLOC_COLORS[key] }}>{fmt(totalCashEarned)}</td>
-                          <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{totalDevEarning > 0 ? fmt(totalDevEarning) : '—'}</td>
-                          <td></td>
-                          <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums' }}>{totalPaidOut > 0 ? fmt(totalPaidOut) : '—'}</td>
-                          <td style={{ textAlign: 'right', fontVariantNumeric: 'tabular-nums', color: currentBalance > 0 ? 'var(--amber)' : 'var(--text3)' }}>{fmt(currentBalance)}</td>
+                          <td style={{ padding: '3px 6px' }}>Total</td>
+                          <td style={{ textAlign: 'right', padding: '3px 6px', fontVariantNumeric: 'tabular-nums' }}>{totalSales > 0 ? fmt(totalSales) : '—'}</td>
+                          <td style={{ textAlign: 'right', padding: '3px 6px', fontVariantNumeric: 'tabular-nums', color: 'var(--text2)' }}>{fmt(totalRevShare)}</td>
+                          <td style={{ padding: '3px 6px' }}></td>
+                          <td style={{ textAlign: 'right', padding: '3px 6px', fontVariantNumeric: 'tabular-nums', color: ALLOC_COLORS[key] }}>{fmt(totalCashEarned)}</td>
+                          <td style={{ padding: '3px 6px' }}></td>
+                          <td style={{ textAlign: 'right', padding: '3px 6px', fontVariantNumeric: 'tabular-nums' }}>{totalDevEarning > 0 ? fmt(totalDevEarning) : '—'}</td>
+                          <td style={{ padding: '3px 6px' }}></td>
+                          <td style={{ textAlign: 'right', padding: '3px 6px', fontVariantNumeric: 'tabular-nums' }}>{totalPaidOut > 0 ? fmt(totalPaidOut) : '—'}</td>
+                          <td style={{ textAlign: 'right', padding: '3px 6px', fontVariantNumeric: 'tabular-nums', color: currentBalance > 0 ? 'var(--amber)' : 'var(--text3)' }}>{fmt(currentBalance)}</td>
                         </tr>
                       )}
                     </tbody>

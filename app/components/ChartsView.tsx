@@ -99,6 +99,8 @@ export function ChartsView({ projects }: { projects: Project[] }) {
   const sum2026 = sumRows(months2026)
   const pctOf = (byMember: Record<MemberKey, number>, booked: number, k: MemberKey) =>
     booked > 0 ? byMember[k] / booked * 100 : null
+  const fmtAmtPct = (amt: number, pct: number | null) =>
+    pct !== null ? `${fmt(amt)} (${Math.round(pct)}%)` : '—'
 
   // Chart: 2025 months collapse into a single "2025 Avg" bar (no Collected bar), 2026 stays monthly, chronological
   const monthlyChartData = [
@@ -112,6 +114,8 @@ export function ChartsView({ projects }: { projects: Project[] }) {
       month: r.month,
       Booked: r.Booked,
       Collected: r.Collected as number | null,
+      jAmt: r.byMember.J,
+      mAmt: r.byMember.M,
       jPct: pctOf(r.byMember, r.Booked, 'J'),
       mPct: pctOf(r.byMember, r.Booked, 'M'),
     })),
@@ -119,6 +123,8 @@ export function ChartsView({ projects }: { projects: Project[] }) {
       month: '2025 Avg',
       Booked: sum2025.Booked / 12,
       Collected: null as number | null,
+      jAmt: sum2025.byMember.J / 12,
+      mAmt: sum2025.byMember.M / 12,
       jPct: pctOf(sum2025.byMember, sum2025.Booked, 'J'),
       mPct: pctOf(sum2025.byMember, sum2025.Booked, 'M'),
     }] : []),
@@ -128,6 +134,8 @@ export function ChartsView({ projects }: { projects: Project[] }) {
     label: '2026 Total',
     Booked: sum2026.Booked,
     Collected: sum2026.Collected as number | null,
+    jAmt: sum2026.byMember.J,
+    mAmt: sum2026.byMember.M,
     jPct: pctOf(sum2026.byMember, sum2026.Booked, 'J'),
     mPct: pctOf(sum2026.byMember, sum2026.Booked, 'M'),
   }
@@ -137,6 +145,8 @@ export function ChartsView({ projects }: { projects: Project[] }) {
     label: '2025-2026 Total',
     Booked: fullBooked,
     Collected: sum2026.Collected as number | null, // 2025 has no Collected data yet
+    jAmt: fullByMember.J,
+    mAmt: fullByMember.M,
     jPct: pctOf(fullByMember, fullBooked, 'J'),
     mPct: pctOf(fullByMember, fullBooked, 'M'),
   }
@@ -214,8 +224,8 @@ export function ChartsView({ projects }: { projects: Project[] }) {
                       <td className="amt">{fmt(row.Booked)}</td>
                       <td className="amt">{row.Collected !== null ? fmt(row.Collected) : '—'}</td>
                       <td className="amt" style={{ color: pending !== null && pending < 0 ? 'var(--red)' : 'var(--text3)' }}>{pending !== null ? fmt(pending) : '—'}</td>
-                      <td className="amt">{row.jPct !== null ? Math.round(row.jPct) + '%' : '—'}</td>
-                      <td className="amt">{row.mPct !== null ? Math.round(row.mPct) + '%' : '—'}</td>
+                      <td className="amt">{fmtAmtPct(row.jAmt, row.jPct)}</td>
+                      <td className="amt">{fmtAmtPct(row.mAmt, row.mPct)}</td>
                     </tr>
                   )
                 })}
@@ -232,8 +242,8 @@ export function ChartsView({ projects }: { projects: Project[] }) {
                       <td className="amt" style={{ fontWeight: 600, color: pending !== null && pending < 0 ? 'var(--red)' : 'var(--text3)' }}>
                         {pending !== null ? fmt(pending) : '—'}
                       </td>
-                      <td className="amt" style={{ fontWeight: 600 }}>{t.jPct !== null ? Math.round(t.jPct) + '%' : '—'}</td>
-                      <td className="amt" style={{ fontWeight: 600 }}>{t.mPct !== null ? Math.round(t.mPct) + '%' : '—'}</td>
+                      <td className="amt" style={{ fontWeight: 600 }}>{fmtAmtPct(t.jAmt, t.jPct)}</td>
+                      <td className="amt" style={{ fontWeight: 600 }}>{fmtAmtPct(t.mAmt, t.mPct)}</td>
                     </tr>
                   )
                 })}
