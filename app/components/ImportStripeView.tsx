@@ -1,11 +1,11 @@
 'use client'
 
-import { Dispatch, SetStateAction, useRef, useState } from 'react'
+import { Dispatch, SetStateAction, useState } from 'react'
 import { Project, fmt, insertProject, upsertProject } from '../lib/data'
+import { emptyInvoice, nextInvoiceSlot } from '../lib/importShared'
 import {
-  parseUpworkCSV, buildReviewRows, nextInvoiceSlot, formatUpworkDate, buildShellProject, emptyInvoice,
-  ReviewRow, RowStatus,
-} from '../lib/upworkImport'
+  StripeInvoiceTx, buildStripeReviewRows, buildShellProject, ReviewRow, RowStatus,
+} from '../lib/stripeImport'
 
 type SuggestionState = 'pending' | 'use-project' | 'dismissed' | null
 
@@ -16,8 +16,7 @@ const statusBadgeClass: Record<RowStatus, string> = {
   'New project': 'badge-new',
   Ambiguous: 'badge-partial',
   Unmatched: 'badge-unpaid',
-  'No slot': 'badge-unpaid',
-  'Already recorded': 'badge-unpaid',
+  'Already recorded': '',
 }
 
 function displayBadge(r: RowState): { label: string; cls: string; style?: React.CSSProperties } {
@@ -31,40 +30,56 @@ function ordinal(n: number): string {
   return ['1st', '2nd', '3rd'][n] || `${n + 1}th`
 }
 
-export function ImportUpworkView({ projects, setProjects }: {
+function defaultSince(): string {
+  const d = new Date()
+  d.setDate(d.getDate() - 30)
+  return d.toISOString().slice(0, 10)
+}
+
+export function ImportStripeView({ projects, setProjects }: {
   projects: Project[]
   setProjects: Dispatch<SetStateAction<Project[]>>
 }) {
-  const fileRef = useRef<HTMLInputElement>(null)
+  const [since, setSince] = useState(defaultSince())
   const [rows, setRows] = useState<RowState[]>([])
-  const [parseError, setParseError] = useState('')
+  const [fetchError, setFetchError] = useState('')
+  const [fetching, setFetching] = useState(false)
   const [summary, setSummary] = useState<{ count: number; projectNames: string[] } | null>(null)
   const [applying, setApplying] = useState(false)
 
-  function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
+  async function fetchInvoices() {
+    setFetching(true)
+    setFetchError('')
     setSummary(null)
-    setParseError('')
-    const reader = new FileReader()
-    reader.onload = (ev) => {
-      const text = ev.target?.result as string
-      const transactions = parseUpworkCSV(text)
+    try {
+      const res = await fetch('/api/list-stripe-invoices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ since }),
+      })
+      if (!res.ok) {
+        const text = await res.text()
+        throw new Error(text || 'Failed to fetch Stripe invoices')
+      }
+      const transactions: StripeInvoiceTx[] = await res.json()
       if (transactions.length === 0) {
-        setParseError('No transactions found in this file.')
+        setFetchError('No paid Stripe invoices found in this date range.')
         setRows([])
         return
       }
-      const built = buildReviewRows(transactions, projects)
+      const built = buildStripeReviewRows(transactions, projects)
       setRows(built.map(r => ({
         ...r,
         included: r.status === 'Matched' || r.status === 'New project',
         applied: false,
         suggestionResolved: r.suggestion ? 'pending' : null,
       })))
+    } catch (err) {
+      setFetchError(err instanceof Error ? err.message : String(err))
+      setRows([])
+    } finally {
+      setFetching(false)
     }
-    reader.readAsText(file)
-    if (fileRef.current) fileRef.current.value = ''
   }
 
   function updateRow(key: string, patch: Partial<RowState>) {
@@ -76,7 +91,7 @@ export function ImportUpworkView({ projects, setProjects }: {
       if (r.key !== key) return r
       if (projectId === null) return { ...r, projectId: null, slot: null }
       const project = projects.find(p => p.id === projectId)
-      const slot = project ? nextInvoiceSlot(project.invoices, r.tx.grossAmount) : null
+      const slot = project ? nextInvoiceSlot(project.invoices, r.tx.amount) : null
       return { ...r, projectId, slot }
     }))
   }
@@ -87,13 +102,13 @@ export function ImportUpworkView({ projects, setProjects }: {
   function applySuggestedProject(key: string) {
     setRows(prev => prev.map(r => {
       if (r.key !== key || !r.suggestion) return r
-      const suggestedName = r.suggestion.upworkName.trim().toLowerCase()
-      const matches = projects.filter(p => (p.upworkName || '').trim().toLowerCase() === suggestedName)
+      const suggestedName = r.suggestion.name.trim().toLowerCase()
+      const matches = projects.filter(p => (p.startup || '').trim().toLowerCase() === suggestedName)
       if (matches.length === 1) {
         const project = matches[0]
         return {
           ...r, status: 'Matched', candidates: [project], projectId: project.id,
-          slot: nextInvoiceSlot(project.invoices, r.tx.grossAmount),
+          slot: nextInvoiceSlot(project.invoices, r.tx.amount),
           groupKey: null, suggestionResolved: 'use-project', included: false,
         }
       }
@@ -127,10 +142,10 @@ export function ImportUpworkView({ projects, setProjects }: {
         if (existingId !== undefined) {
           const current = workingProjects.get(existingId)!
           const invs = [...current.invoices, {
-            ...emptyInvoice(), num: r.tx.transactionId, amt: r.tx.grossAmount, uwFee: r.tx.fee, net: r.tx.net,
-            paid: formatUpworkDate(r.tx.date), isPaid: true,
+            ...emptyInvoice(), num: r.tx.number, amt: r.tx.amount, stripeFee: r.tx.fee, net: r.tx.amount - r.tx.fee,
+            paid: r.tx.paidAt, isPaid: true, stripeInvoiceId: r.tx.id, stripeInvoiceUrl: r.tx.hostedInvoiceUrl,
           }]
-          const updated: Project = { ...current, amount: current.amount + r.tx.grossAmount, invoices: invs }
+          const updated: Project = { ...current, amount: current.amount + r.tx.amount, invoices: invs }
           workingProjects.set(existingId, updated)
           existingTouchedIds.add(existingId)
           touchedNames.set(existingId, updated.startup)
@@ -144,7 +159,7 @@ export function ImportUpworkView({ projects, setProjects }: {
             touchedNames.set(created.id, created.startup)
             appliedKeys.add(r.key)
           } catch (err) {
-            console.error('Failed to create project from Upwork import', err)
+            console.error('Failed to create project from Stripe import', err)
           }
         }
       } else if (r.projectId !== null && r.slot !== null) {
@@ -153,11 +168,11 @@ export function ImportUpworkView({ projects, setProjects }: {
         const invs = [...current.invoices]
         while (invs.length <= r.slot) invs.push(emptyInvoice())
         invs[r.slot] = {
-          ...invs[r.slot], num: r.tx.transactionId, amt: r.tx.grossAmount, uwFee: r.tx.fee, net: r.tx.net,
-          paid: formatUpworkDate(r.tx.date), isPaid: true,
+          ...invs[r.slot], num: r.tx.number, amt: r.tx.amount, stripeFee: r.tx.fee, net: r.tx.amount - r.tx.fee,
+          paid: r.tx.paidAt, isPaid: true, stripeInvoiceId: r.tx.id, stripeInvoiceUrl: r.tx.hostedInvoiceUrl,
         }
         const shouldAccumulate = (originalAmounts.get(r.projectId) ?? 0) === 0
-        const updated: Project = { ...current, invoices: invs, amount: shouldAccumulate ? current.amount + r.tx.grossAmount : current.amount }
+        const updated: Project = { ...current, invoices: invs, amount: shouldAccumulate ? current.amount + r.tx.amount : current.amount }
         workingProjects.set(r.projectId, updated)
         existingTouchedIds.add(r.projectId)
         touchedNames.set(r.projectId, updated.startup)
@@ -168,7 +183,7 @@ export function ImportUpworkView({ projects, setProjects }: {
     try {
       await Promise.all([...existingTouchedIds].map(id => upsertProject(workingProjects.get(id)!)))
     } catch (err) {
-      console.error('Failed to save one or more projects updated from Upwork import', err)
+      console.error('Failed to save one or more projects updated from Stripe import', err)
     }
 
     setProjects(prev => {
@@ -188,7 +203,13 @@ export function ImportUpworkView({ projects, setProjects }: {
   return (
     <div style={{ padding: '1.5rem 0', display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-        <input ref={fileRef} type="file" accept=".csv" onChange={handleFile} style={{ fontSize: 12 }} />
+        <label style={{ fontSize: 12, color: 'var(--text2)', display: 'flex', alignItems: 'center', gap: 6 }}>
+          Since
+          <input type="date" className="cell-input" value={since} onChange={e => setSince(e.target.value)} />
+        </label>
+        <button className="btn" disabled={fetching} onClick={fetchInvoices}>
+          {fetching ? 'Fetching…' : 'Fetch Stripe Invoices'}
+        </button>
         {rows.length > 0 && (
           <button className="btn btn-primary" disabled={selectedCount === 0 || applying} onClick={applySelected}>
             {applying ? 'Applying…' : `Apply Selected (${selectedCount})`}
@@ -196,7 +217,7 @@ export function ImportUpworkView({ projects, setProjects }: {
         )}
       </div>
 
-      {parseError && <div style={{ fontSize: 12, color: 'var(--red)' }}>{parseError}</div>}
+      {fetchError && <div style={{ fontSize: 12, color: 'var(--red)' }}>{fetchError}</div>}
 
       {summary && (
         <div style={{ fontSize: 12, color: 'var(--green)' }}>
@@ -213,8 +234,8 @@ export function ImportUpworkView({ projects, setProjects }: {
                 <th></th>
                 <th>Date</th>
                 <th>Client</th>
-                <th>Contract</th>
-                <th>Gross</th>
+                <th>Description</th>
+                <th>Amount</th>
                 <th>Fee</th>
                 <th>Net</th>
                 <th>Matched Project</th>
@@ -238,19 +259,19 @@ export function ImportUpworkView({ projects, setProjects }: {
                         onChange={e => updateRow(r.key, { included: e.target.checked })}
                         style={{ cursor: 'pointer' }} />
                     </td>
-                    <td>{r.tx.date}</td>
-                    <td>{r.tx.clientName}</td>
-                    <td style={{ color: 'var(--text2)' }}>{r.tx.contractTitle}</td>
-                    <td className="amt">{fmt(r.tx.grossAmount)}</td>
+                    <td>{r.tx.paidAt}</td>
+                    <td>{r.tx.customerName || r.tx.customerEmail}</td>
+                    <td style={{ color: 'var(--text2)' }}>{r.tx.description}</td>
+                    <td className="amt">{fmt(r.tx.amount)}</td>
                     <td className="amt">{fmt(r.tx.fee)}</td>
-                    <td className="amt">{fmt(r.tx.net)}</td>
+                    <td className="amt">{fmt(r.tx.amount - r.tx.fee)}</td>
                     <td>
                       {isRecorded ? (
                         <span style={{ color: 'var(--text3)' }}>—</span>
                       ) : pendingSuggestion ? (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                           <span style={{ fontSize: 11, color: 'var(--amber)' }}>
-                            Did you mean: <strong>{r.suggestion!.upworkName}</strong>?
+                            Did you mean: <strong>{r.suggestion!.name}</strong>?
                           </span>
                           <div style={{ display: 'flex', gap: 6 }}>
                             <button className="btn" style={{ fontSize: 10, padding: '2px 6px' }}
@@ -261,14 +282,14 @@ export function ImportUpworkView({ projects, setProjects }: {
                         </div>
                       ) : isNew ? (
                         <span style={{ color: 'var(--text2)', fontStyle: 'italic' }}>
-                          + New — {r.tx.clientName} ({r.tx.month})
+                          + New — {r.tx.customerName || r.tx.customerEmail}
                         </span>
                       ) : (
                         <select className="cell-input" value={r.projectId ?? ''} disabled={r.applied}
                           onChange={e => selectProject(r.key, e.target.value ? +e.target.value : null)}>
                           <option value="">— select —</option>
                           {[...projectOptions].sort((a, b) => a.startup.localeCompare(b.startup)).map(p => (
-                            <option key={p.id} value={p.id}>{p.startup} ({p.month}){p.upworkName ? ` — ${p.upworkName}` : ''}</option>
+                            <option key={p.id} value={p.id}>{p.startup} ({p.month}){p.email ? ` — ${p.email}` : ''}</option>
                           ))}
                         </select>
                       )}
