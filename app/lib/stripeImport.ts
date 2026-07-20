@@ -82,11 +82,16 @@ export type ReviewRow = {
 // to the SAME existing project (e.g. two invoices paid the same month) get distinct, sequential
 // invoice slots instead of colliding on the same slot.
 //
-// Invoices whose Stripe Invoice ID is already recorded on any existing project's invoices
-// (`invoice.stripeInvoiceId`) are flagged 'Already recorded' up front and never re-matched — this
-// is what makes re-running the importer over an overlapping date range safe.
+// Invoices already recorded on any existing project's invoices are flagged 'Already recorded' up
+// front and never re-matched — this is what makes re-running the importer over an overlapping
+// date range safe. Matched two ways: by Stripe Invoice ID (`invoice.stripeInvoiceId`, set when
+// this importer or "Create Stripe Invoice" wrote the row) OR by invoice number
+// (`invoice.num`, e.g. "K86DCSOZ-0002") — invoices entered manually before this importer existed
+// often have the right number recorded but a missing or stale stripeInvoiceId, so the ID alone
+// isn't a reliable enough signal on its own.
 export function buildStripeReviewRows(transactions: StripeInvoiceTx[], projects: Project[]): ReviewRow[] {
   const recordedIds = new Set(projects.flatMap(p => p.invoices.map(inv => inv.stripeInvoiceId).filter(Boolean)))
+  const recordedNumbers = new Set(projects.flatMap(p => p.invoices.map(inv => inv.num).filter(Boolean)))
 
   const workingInvoices = new Map<number, Invoice[]>()
   const getWorking = (project: Project): Invoice[] => {
@@ -96,7 +101,7 @@ export function buildStripeReviewRows(transactions: StripeInvoiceTx[], projects:
   const distinctClientNames = [...new Set(projects.map(p => (p.startup || '').trim()).filter(Boolean))]
 
   return transactions.map(tx => {
-    if (recordedIds.has(tx.id)) {
+    if (recordedIds.has(tx.id) || (tx.number && recordedNumbers.has(tx.number))) {
       return { key: tx.id, tx, status: 'Already recorded' as RowStatus, candidates: [], projectId: null, slot: null, groupKey: null, suggestion: null }
     }
 
