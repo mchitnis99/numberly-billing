@@ -94,7 +94,9 @@ export function AllocationsView({ projects }: { projects: Project[] }) {
     const totalCashEarned = rows.reduce((s, r) => s + r.cashEarned, 0)
     const totalPaidOut = rows.reduce((s, r) => s + r.payout, 0)
     const currentBalance = rows.length > 0 ? rows[rows.length - 1].balance : openingBalance
-    return { key, name, rows, openingBalance, totalSales, totalRevShare, totalCashEarned, totalPaidOut, currentBalance }
+    const sales2026 = projects.filter(p => p.soldBy?.toUpperCase() === key && parseYearAndMon(p.month).fullYr === 2026).reduce((s, p) => s + p.amount, 0)
+    const sales2025 = projects.filter(p => p.soldBy?.toUpperCase() === key && parseYearAndMon(p.month).fullYr === 2025).reduce((s, p) => s + p.amount, 0)
+    return { key, name, rows, openingBalance, totalSales, totalRevShare, totalCashEarned, totalPaidOut, currentBalance, sales2026, sales2025 }
   }), [projects, payouts, devEarnings, allMonths])
 
   async function commitEdit(member: MemberKey, month: string, field: 'payout' | 'dev') {
@@ -134,13 +136,13 @@ export function AllocationsView({ projects }: { projects: Project[] }) {
 
       {/* Summary cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-        {memberData.map(({ key, name, currentBalance, totalSales, totalRevShare, totalCashEarned, totalPaidOut }) => (
+        {memberData.map(({ key, name, sales2026, sales2025 }) => (
           <div key={key} style={{ background: 'var(--surface2)', borderRadius: 'var(--radius)', padding: '0.75rem 1rem', border: '0.5px solid var(--border)' }}>
             <div style={{ fontSize: 10, color: ALLOC_COLORS[key], textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600, marginBottom: 4 }}>{name}</div>
-            <div style={{ fontSize: 17, fontWeight: 600, marginBottom: 1 }}>{fmt(currentBalance)}</div>
-            <div style={{ fontSize: 10, color: 'var(--text3)', marginBottom: 4 }}>balance</div>
-            <div style={{ fontSize: 10, color: 'var(--text2)' }}>{fmt(totalSales)} Sales · {fmt(totalRevShare)} Rev Share · {fmt(totalCashEarned)} Cash Earned</div>
-            <div style={{ fontSize: 10, color: 'var(--text2)' }}>{fmt(totalPaidOut)} Paid Out</div>
+            <div style={{ fontSize: 17, fontWeight: 600, marginBottom: 1 }}>{fmt(sales2026)}</div>
+            <div style={{ fontSize: 10, color: 'var(--text3)', marginBottom: 4 }}>2026 Sales</div>
+            <div style={{ fontSize: 13, fontWeight: 500 }}>{fmt(sales2025)}</div>
+            <div style={{ fontSize: 10, color: 'var(--text3)' }}>2025 Sales</div>
           </div>
         ))}
       </div>
