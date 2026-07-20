@@ -860,6 +860,7 @@ export default function App() {
                     {([
                       ['Due date','due','text'],['Date paid','paid','text'],
                       ['UW fee','uwFee','number'],['Stripe fee','stripeFee','number'],
+                      ['Stripe Invoice ID','stripeInvoiceId','text'],
                     ] as [string,string,string][]).map(([label, key, type]) => (
                       <div className="inv-cell" key={key}>
                         <div className="inv-key">{label}</div>
