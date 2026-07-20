@@ -211,6 +211,30 @@ export default function App() {
     }
   }
 
+  async function duplicateProject(p: Project) {
+    try {
+      const created = await insertProject({
+        ...emptyProject(0),
+        newrep: 'Repeat',
+        month: p.month,
+        channel: p.channel,
+        delivery: p.delivery,
+        startup: p.startup,
+        soldBy: p.soldBy,
+        alloc: { ...p.alloc },
+        upworkName: p.upworkName,
+        country: p.country,
+        contact: p.contact,
+        email: p.email,
+        billingThru: p.billingThru,
+      })
+      setProjects(prev => [...prev, created])
+      openDetail(created.id)
+    } catch (err) {
+      console.error('Failed to duplicate project', err)
+    }
+  }
+
   async function deleteProject(id: number) {
     setProjects(prev => prev.filter(p => p.id !== id))
     openDetail(null)
@@ -927,6 +951,7 @@ export default function App() {
             })}
 
             <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '0.5px solid var(--border)', display: 'flex', gap: 8 }}>
+              <button className="btn" onClick={() => duplicateProject(detail)}>Duplicate</button>
               <button className="btn btn-danger" onClick={() => { if (confirm('Delete this project?')) deleteProject(detail.id) }}>Delete project</button>
             </div>
           </div>
