@@ -126,6 +126,17 @@ export function ChartsView({ projects }: { projects: Project[] }) {
       jPct: pctOf(sum2025.byMember, sum2025.Booked, 'J'),
       mPct: pctOf(sum2025.byMember, sum2025.Booked, 'M'),
     }] : []),
+    // 2026 isn't a complete year yet, so average over the months of 2026 data seen so far
+    // (not a fixed /12) — that's what makes this comparable to the 2025 full-year average.
+    ...(months2026.length > 0 ? [{
+      month: '2026 Avg',
+      Booked: sum2026.Booked / months2026.length,
+      Collected: sum2026.Collected / months2026.length as number | null,
+      jAmt: sum2026.byMember.J / months2026.length,
+      mAmt: sum2026.byMember.M / months2026.length,
+      jPct: pctOf(sum2026.byMember, sum2026.Booked, 'J'),
+      mPct: pctOf(sum2026.byMember, sum2026.Booked, 'M'),
+    }] : []),
   ]
 
   const total2026 = {
