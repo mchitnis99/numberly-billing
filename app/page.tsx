@@ -689,7 +689,7 @@ export default function App() {
                         title="Mark as done" />
                     </td>
                     <td><InlineEdit id={p.id} field="month" value={p.month.replace(/,/g, '').trim()} options={MONTH_OPTIONS} /></td>
-                    <td><InlineEdit id={p.id} field="delivery" value={p.delivery} options={['FM','FM Update','PD','BP','Advisory','Bookkeeping']} /></td>
+                    <td><InlineEdit id={p.id} field="delivery" value={p.delivery} options={['FM','FM Update','PD','BP','Advisory','Bookkeeping','Fractional CFO']} /></td>
                     <td style={{ fontWeight: 500 }}><InlineEdit id={p.id} field="startup" value={p.startup} /></td>
                     <td style={{ color: 'var(--text2)', fontStyle: p.description ? 'normal' : 'italic' }}><InlineEdit id={p.id} field="description" value={p.description} /></td>
                     <td><InlineEdit id={p.id} field="soldBy" value={p.soldBy} /></td>
@@ -755,7 +755,7 @@ export default function App() {
                 ['Month', 'month', 'select', MONTH_OPTIONS],
                 ['New / Repeat', 'newrep', 'select', ['New','Repeat']],
                 ['Channel', 'channel', 'select', ['UW','Repeat','Referral','Website']],
-                ['Delivery type', 'delivery', 'select', ['FM','FM Update','PD','BP','Advisory','Bookkeeping']],
+                ['Delivery type', 'delivery', 'select', ['FM','FM Update','PD','BP','Advisory','Bookkeeping','Fractional CFO']],
                 ['Sold by', 'soldBy', 'text'],
                 ['Contact', 'contact', 'text'],
                 ['Email', 'email', 'text'],

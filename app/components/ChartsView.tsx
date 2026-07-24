@@ -174,7 +174,7 @@ export function ChartsView({ projects }: { projects: Project[] }) {
   }))
 
   // 2026 bookings by delivery type — stacked bar per month
-  const KNOWN_DELIVERIES = ['FM', 'FM Update', 'Advisory', 'Pitch Deck', 'BP']
+  const KNOWN_DELIVERIES = ['FM', 'FM Update', 'Advisory', 'Pitch Deck', 'BP', 'Fractional CFO']
   function normalizeDelivery(raw: string | undefined): string {
     const d = raw?.trim() ?? ''
     if (d === 'PD') return 'Pitch Deck'
