@@ -9,7 +9,11 @@ import {
 
 type SuggestionState = 'pending' | 'use-project' | 'dismissed' | null
 
-type RowState = ReviewRow & { included: boolean; applied: boolean; suggestionResolved: SuggestionState }
+type RowState = ReviewRow & {
+  included: boolean; applied: boolean; suggestionResolved: SuggestionState
+  // Preserved so a manually-picked project can be cleared back to the auto-detected state.
+  originalStatus: RowStatus; originalGroupKey: string | null
+}
 
 const statusBadgeClass: Record<RowStatus, string> = {
   Matched: 'badge-paid',
@@ -73,6 +77,8 @@ export function ImportStripeView({ projects, setProjects }: {
         included: r.status === 'Matched' || r.status === 'New project',
         applied: false,
         suggestionResolved: r.suggestion ? 'pending' : null,
+        originalStatus: r.status,
+        originalGroupKey: r.groupKey,
       })))
     } catch (err) {
       setFetchError(err instanceof Error ? err.message : String(err))
@@ -86,13 +92,18 @@ export function ImportStripeView({ projects, setProjects }: {
     setRows(prev => prev.map(r => r.key === key ? { ...r, ...patch } : r))
   }
 
+  // Lets the user manually redirect a New/Unmatched row to any existing project — needed when
+  // Stripe's customer name/email has no overlap with what's on file, or the match exists but under
+  // a different month bucket than the invoice's paid date. Clearing restores the auto-detected state.
   function selectProject(key: string, projectId: number | null) {
     setRows(prev => prev.map(r => {
       if (r.key !== key) return r
-      if (projectId === null) return { ...r, projectId: null, slot: null }
+      if (projectId === null) {
+        return { ...r, projectId: null, slot: null, status: r.originalStatus, groupKey: r.originalGroupKey }
+      }
       const project = projects.find(p => p.id === projectId)
       const slot = project ? nextInvoiceSlot(project.invoices, r.tx.amount) : null
-      return { ...r, projectId, slot }
+      return { ...r, status: 'Matched', groupKey: null, projectId, slot }
     }))
   }
 
@@ -245,10 +256,10 @@ export function ImportStripeView({ projects, setProjects }: {
             </thead>
             <tbody>
               {rows.map(r => {
-                const isNew = r.status === 'New project'
                 const isRecorded = r.status === 'Already recorded'
                 const pendingSuggestion = !!(r.suggestion && r.suggestionResolved === 'pending')
-                const projectOptions = r.status === 'Ambiguous' ? r.candidates : projects
+                const willCreateNew = r.projectId === null && r.groupKey !== null
+                const projectOptions = r.candidates.length > 1 ? r.candidates : projects
                 const selectedProject = r.projectId !== null ? projects.find(p => p.id === r.projectId) : undefined
                 const slotChoices = Array.from({ length: Math.max(3, selectedProject?.invoices.length ?? 0, (r.slot ?? 0) + 1) }, (_, i) => i)
                 const badge = displayBadge(r)
@@ -280,14 +291,10 @@ export function ImportStripeView({ projects, setProjects }: {
                               onClick={() => dismissSuggestion(r.key)}>No, create new</button>
                           </div>
                         </div>
-                      ) : isNew ? (
-                        <span style={{ color: 'var(--text2)', fontStyle: 'italic' }}>
-                          + New — {r.tx.customerName || r.tx.customerEmail}
-                        </span>
                       ) : (
                         <select className="cell-input" value={r.projectId ?? ''} disabled={r.applied}
                           onChange={e => selectProject(r.key, e.target.value ? +e.target.value : null)}>
-                          <option value="">— select —</option>
+                          <option value="">{willCreateNew ? `+ New — ${r.tx.customerName || r.tx.customerEmail}` : '— select —'}</option>
                           {[...projectOptions].sort((a, b) => a.startup.localeCompare(b.startup)).map(p => (
                             <option key={p.id} value={p.id}>{p.startup} ({p.month}){p.email ? ` — ${p.email}` : ''}</option>
                           ))}
@@ -299,7 +306,7 @@ export function ImportStripeView({ projects, setProjects }: {
                         <span style={{ color: 'var(--text3)' }}>—</span>
                       ) : pendingSuggestion ? (
                         <span style={{ color: 'var(--text3)' }}>—</span>
-                      ) : isNew ? (
+                      ) : willCreateNew ? (
                         <span style={{ color: 'var(--text2)', fontStyle: 'italic' }}>new</span>
                       ) : (
                         <select className="cell-input" value={r.slot ?? ''} disabled={r.applied}

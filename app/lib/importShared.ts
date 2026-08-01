@@ -64,7 +64,7 @@ function levenshtein(a: string, b: string): number {
   return dp[n]
 }
 
-function normalizeForMatch(s: string): string {
+export function normalizeForMatch(s: string): string {
   return s.toLowerCase().trim().replace(/[^\w\s]/g, '').replace(/\s+/g, ' ').trim()
 }
 

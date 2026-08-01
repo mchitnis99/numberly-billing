@@ -1,6 +1,6 @@
 import Papa from 'papaparse'
 import { Project, Invoice } from './data'
-import { emptyInvoice, nextInvoiceSlot, formatDateMDY, deriveMonth, suggestNameMatch, FuzzySuggestion as NameSuggestion } from './importShared'
+import { emptyInvoice, nextInvoiceSlot, formatDateMDY, deriveMonth, suggestNameMatch, normalizeForMatch, FuzzySuggestion as NameSuggestion } from './importShared'
 
 export type UpworkTransaction = {
   transactionId: string
@@ -69,9 +69,9 @@ export type MatchStatus = 'matched' | 'ambiguous' | 'new' | 'unmatched'
 // Matches on upworkName + month together. A same-client project in a different month is not
 // "ambiguous" — it just means there's no project for this month yet, so it falls through to 'new'.
 export function matchProjectsByNameAndMonth(clientName: string, month: string, projects: Project[]): { status: MatchStatus; candidates: Project[] } {
-  const name = clientName.trim().toLowerCase()
+  const name = normalizeForMatch(clientName)
   if (!name) return { status: 'unmatched', candidates: [] }
-  const matches = projects.filter(p => (p.upworkName || '').trim().toLowerCase() === name && p.month === month)
+  const matches = projects.filter(p => normalizeForMatch(p.upworkName || '') === name && p.month === month)
   if (matches.length === 1) return { status: 'matched', candidates: matches }
   if (matches.length > 1) return { status: 'ambiguous', candidates: matches }
   return { status: 'new', candidates: [] }
