@@ -89,14 +89,14 @@ export const FUZZY_MATCH_THRESHOLD = 0.8
 
 export type FuzzySuggestion = { name: string; score: number }
 
-// Best fuzzy match for `name` among `candidateNames`, above `threshold`.
-// Exact matches (after normalizing) are excluded — those represent the same client under a
-// different key (e.g. different month), which is expected/intentional, not a typo worth flagging.
+// Best fuzzy match for `name` among `candidateNames`, above `threshold`. This is only called for
+// rows that didn't already resolve to a same-period match, so an exact-name hit here always means
+// the same client exists under a different key (e.g. a different month) — still worth surfacing as
+// a suggestion, since the default of silently creating a new project is usually not what's wanted.
 export function suggestNameMatch(name: string, candidateNames: string[], threshold: number = FUZZY_MATCH_THRESHOLD): FuzzySuggestion | null {
   let best: FuzzySuggestion | null = null
   for (const candidate of candidateNames) {
     const score = nameSimilarity(name, candidate)
-    if (score >= 1) continue
     if (!best || score > best.score) best = { name: candidate, score }
   }
   return best && best.score >= threshold ? best : null
