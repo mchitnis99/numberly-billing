@@ -334,7 +334,10 @@ export default function App() {
     const matchSearch = !s || p.startup.toLowerCase().includes(s) || p.contact.toLowerCase().includes(s) || p.month.toLowerCase().includes(s) || p.channel.toLowerCase().includes(s) || p.description.toLowerCase().includes(s) || (p.upworkName || '').toLowerCase().includes(s)
     const status = paymentStatus(p)
     const ps = pipelineStatus(p)
-    const matchView = view === 'active' ? ps !== 'Fully Paid' && !p.badDebt && !p.done :
+    // A search term looks across every project regardless of tab — a tab's own scope (e.g. Active
+    // hiding Fully Paid) should never silently hide something you're actively searching for.
+    const matchView = !!s ? true :
+      view === 'active' ? ps !== 'Fully Paid' && !p.badDebt && !p.done :
       view === 'outstanding' ? (remainingBalance(p) > 0 && !p.badDebt) :
       view === 'ready' ? p.readyForBilling :
       view === 'invoiced' ? (!!(p.invoicedAt && p.invoicedAt.length > 0) && ps !== 'Fully Paid') :
