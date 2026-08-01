@@ -69,11 +69,18 @@ function normalizeForMatch(s: string): string {
 }
 
 // Similarity in [0, 1]: 1 = identical after normalizing, 0 = completely different / either side empty.
+//
+// Plain edit-distance badly underscores cases like "CounselFi" vs "Tamara Brenes, CounselFi" —
+// the same client, but Upwork's CSV export sometimes gives just the company name while the app
+// has "Contact Name, Company" on file (or vice versa). A short string fully contained in a longer
+// one is treated as a strong match instead of falling through on edit distance alone.
 function nameSimilarity(a: string, b: string): number {
   const na = normalizeForMatch(a)
   const nb = normalizeForMatch(b)
   if (!na || !nb) return 0
   if (na === nb) return 1
+  const [shorter, longer] = na.length <= nb.length ? [na, nb] : [nb, na]
+  if (shorter.length >= 4 && longer.includes(shorter)) return 0.95
   const maxLen = Math.max(na.length, nb.length)
   return 1 - levenshtein(na, nb) / maxLen
 }
