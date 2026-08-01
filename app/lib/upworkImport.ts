@@ -87,7 +87,7 @@ export function buildShellProject(tx: UpworkTransaction): Project {
     month: tx.month,
     channel: 'UW',
     delivery: 'FM',
-    startup: tx.contractTitle,
+    startup: tx.clientName,
     modelDesc: '',
     soldBy: '',
     alloc: { J: 0, M: 0, N: 0, A: 0, G: 0, S: 0 },

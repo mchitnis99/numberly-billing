@@ -331,7 +331,7 @@ export default function App() {
   // Filtering
   const filtered = useMemo(() => projects.filter(p => {
     const s = search.toLowerCase()
-    const matchSearch = !s || p.startup.toLowerCase().includes(s) || p.contact.toLowerCase().includes(s) || p.month.toLowerCase().includes(s) || p.channel.toLowerCase().includes(s) || p.description.toLowerCase().includes(s)
+    const matchSearch = !s || p.startup.toLowerCase().includes(s) || p.contact.toLowerCase().includes(s) || p.month.toLowerCase().includes(s) || p.channel.toLowerCase().includes(s) || p.description.toLowerCase().includes(s) || (p.upworkName || '').toLowerCase().includes(s)
     const status = paymentStatus(p)
     const ps = pipelineStatus(p)
     const matchView = view === 'active' ? ps !== 'Fully Paid' && !p.badDebt && !p.done :
