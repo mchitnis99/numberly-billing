@@ -25,6 +25,14 @@ export { emptyInvoice, nextInvoiceSlot, deriveMonth }
 
 // Parses an Upwork transaction-history CSV export into one transaction per Transaction ID group.
 // Rows with Transaction type "Payment" (personal card charges, no Transaction ID) are ignored.
+//
+// Refunds need special handling. When Monica/Numberly refunds a client, Upwork logs it as a
+// *separate* Transaction ID containing a "Refund to client" row (the negative reversal) and a
+// "Service fee refund" row (Upwork crediting back its cut) — it does not reference the original
+// earning's Transaction ID. Naively summing every group's positive amounts as revenue means a
+// refunded week's earnings still get counted, AND the refund's own fee-credit line gets counted
+// again as if it were new income. Both the refund group and the original earning group it reverses
+// are excluded entirely — matched by same Client team + contract title + exact refunded amount.
 export function parseUpworkCSV(text: string): UpworkTransaction[] {
   const { data } = Papa.parse<RawRow>(text, { header: true, skipEmptyLines: true, transformHeader: h => h.trim() })
 
@@ -38,8 +46,29 @@ export function parseUpworkCSV(text: string): UpworkTransaction[] {
     groups.get(txId)!.push(row)
   }
 
+  const excluded = new Set<string>()
+  for (const [txId, rows] of groups) {
+    const refundRow = rows.find(r => (r['Transaction type'] || '').trim() === 'Refund to client')
+    if (!refundRow) continue
+    excluded.add(txId)
+    const refundedAmt = Math.abs(parseAmt(refundRow['Amount $']))
+    const client = (refundRow['Client team'] || '').trim()
+    const contract = (refundRow['Transaction summary'] || '').trim()
+    for (const [otherId, otherRows] of groups) {
+      if (excluded.has(otherId)) continue
+      if ((otherRows[0]['Client team'] || '').trim() !== client) continue
+      if ((otherRows[0]['Transaction summary'] || '').trim() !== contract) continue
+      const otherGross = otherRows.reduce((s, r) => { const a = parseAmt(r['Amount $']); return a > 0 ? s + a : s }, 0)
+      if (Math.abs(otherGross - refundedAmt) <= 0.01) {
+        excluded.add(otherId)
+        break
+      }
+    }
+  }
+
   const results: UpworkTransaction[] = []
   for (const [txId, rows] of groups) {
+    if (excluded.has(txId)) continue
     let grossAmount = 0
     let fee = 0
     for (const row of rows) {
