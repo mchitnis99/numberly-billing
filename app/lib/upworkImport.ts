@@ -1,6 +1,6 @@
 import Papa from 'papaparse'
-import { Project, Invoice } from './data'
-import { emptyInvoice, nextInvoiceSlot, formatDateMDY, deriveMonth, suggestNameMatch, normalizeForMatch, FuzzySuggestion as NameSuggestion } from './importShared'
+import { Project } from './data'
+import { emptyInvoice, nextInvoiceSlot, formatDateMDY, deriveMonth, suggestNameMatch, normalizeForMatch, accumulateInvoice, invoiceNumIds, FuzzySuggestion as NameSuggestion } from './importShared'
 
 export type UpworkTransaction = {
   transactionId: string
@@ -136,7 +136,7 @@ export function buildShellProject(tx: UpworkTransaction): Project {
     importedBalance: 0,
     importedData: false,
     notes: '',
-    invoices: [{ ...emptyInvoice(), num: tx.transactionId, amt: tx.grossAmount, uwFee: tx.fee, net: tx.net, paid: formattedDate, isPaid: true }],
+    invoices: [accumulateInvoice(emptyInvoice(), { amt: tx.grossAmount, fee: tx.fee, net: tx.net, paid: formattedDate, txId: tx.transactionId })],
     stripeInvoiceId: '',
     stripeInvoiceUrl: '',
     invoicedAt: '',
@@ -166,21 +166,19 @@ export type ReviewRow = {
   suggestion: FuzzySuggestion | null // populated only for 'New project' / 'Unmatched' rows
 }
 
-// Builds review rows for the whole parsed batch in one pass, so multiple transactions that
-// auto-match to the SAME existing project (e.g. two weekly payments in the same month) are
-// assigned distinct, sequential invoice slots instead of colliding on the same slot.
+// Builds review rows for the whole parsed batch in one pass.
 //
 // Transactions whose Upwork Transaction ID is already recorded on any existing project's invoices
-// (`invoice.num`) are flagged 'Already recorded' up front and never re-matched — this is what
-// makes re-running the importer over the same or overlapping CSV export safe.
+// are flagged 'Already recorded' up front and never re-matched — this is what makes re-running the
+// importer over the same or overlapping CSV export safe. Recorded IDs are read via `invoiceNumIds`
+// since an accumulating invoice's `num` field holds a comma-separated list of every transaction
+// ID it has folded in, not just one.
+//
+// Matched/new-project rows all target invoice slot 0 — every transaction for the same client+month
+// accumulates into one running-total invoice (see `accumulateInvoice`) rather than each getting its
+// own slot, so there's no need to reserve/track slots across rows in the same batch.
 export function buildReviewRows(transactions: UpworkTransaction[], projects: Project[]): ReviewRow[] {
-  const recordedIds = new Set(projects.flatMap(p => p.invoices.map(inv => inv.num).filter(Boolean)))
-
-  const workingInvoices = new Map<number, Invoice[]>()
-  const getWorking = (project: Project): Invoice[] => {
-    if (!workingInvoices.has(project.id)) workingInvoices.set(project.id, project.invoices.map(inv => ({ ...inv })))
-    return workingInvoices.get(project.id)!
-  }
+  const recordedIds = new Set(projects.flatMap(p => p.invoices.flatMap(inv => invoiceNumIds(inv.num))))
   const distinctUpworkNames = [...new Set(projects.map(p => (p.upworkName || '').trim()).filter(Boolean))]
 
   return transactions.map(tx => {
@@ -196,13 +194,8 @@ export function buildReviewRows(transactions: UpworkTransaction[], projects: Pro
     let suggestion: FuzzySuggestion | null = null
 
     if (match.status === 'matched') {
-      const project = match.candidates[0]
-      projectId = project.id
-      const working = getWorking(project)
-      slot = nextInvoiceSlot(working, tx.grossAmount)
-      while (working.length <= slot) working.push(emptyInvoice())
-      // Tentatively reserve the slot so the next transaction targeting this project moves past it
-      working[slot] = { ...working[slot], amt: tx.grossAmount, paid: 'pending' }
+      projectId = match.candidates[0].id
+      slot = 0
       status = 'Matched'
     } else if (match.status === 'ambiguous') {
       status = 'Ambiguous'

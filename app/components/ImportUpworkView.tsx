@@ -2,8 +2,9 @@
 
 import { Dispatch, SetStateAction, useRef, useState } from 'react'
 import { Project, fmt, insertProject, upsertProject } from '../lib/data'
+import { accumulateInvoice, emptyInvoice } from '../lib/importShared'
 import {
-  parseUpworkCSV, buildReviewRows, nextInvoiceSlot, formatUpworkDate, buildShellProject, emptyInvoice,
+  parseUpworkCSV, buildReviewRows, formatUpworkDate, buildShellProject,
   ReviewRow, RowStatus,
 } from '../lib/upworkImport'
 
@@ -81,15 +82,15 @@ export function ImportUpworkView({ projects, setProjects }: {
   // clients where Upwork's "Client team" name has no textual overlap with what's on file (e.g. a
   // contact's personal name vs. the company name we track), or where the match exists but in a
   // different month than the payment date. Clearing the selection restores the auto-detected state.
+  // Always targets slot 0 — matched transactions accumulate into one running-total invoice rather
+  // than each claiming their own slot (see accumulateInvoice).
   function selectProject(key: string, projectId: number | null) {
     setRows(prev => prev.map(r => {
       if (r.key !== key) return r
       if (projectId === null) {
         return { ...r, projectId: null, slot: null, status: r.originalStatus, groupKey: r.originalGroupKey }
       }
-      const project = projects.find(p => p.id === projectId)
-      const slot = project ? nextInvoiceSlot(project.invoices, r.tx.grossAmount) : null
-      return { ...r, status: 'Matched', groupKey: null, projectId, slot }
+      return { ...r, status: 'Matched', groupKey: null, projectId, slot: 0 }
     }))
   }
 
@@ -104,8 +105,7 @@ export function ImportUpworkView({ projects, setProjects }: {
       if (matches.length === 1) {
         const project = matches[0]
         return {
-          ...r, status: 'Matched', candidates: [project], projectId: project.id,
-          slot: nextInvoiceSlot(project.invoices, r.tx.grossAmount),
+          ...r, status: 'Matched', candidates: [project], projectId: project.id, slot: 0,
           groupKey: null, suggestionResolved: 'use-project', included: false,
         }
       }
@@ -126,7 +126,6 @@ export function ImportUpworkView({ projects, setProjects }: {
     setApplying(true)
 
     const workingProjects = new Map<number, Project>(projects.map(p => [p.id, p]))
-    const originalAmounts = new Map<number, number>(projects.map(p => [p.id, p.amount]))
     const newlyCreatedByGroup = new Map<string, number>()
     const createdProjects: Project[] = []
     const existingTouchedIds = new Set<number>()
@@ -138,10 +137,10 @@ export function ImportUpworkView({ projects, setProjects }: {
         const existingId = newlyCreatedByGroup.get(r.groupKey)
         if (existingId !== undefined) {
           const current = workingProjects.get(existingId)!
-          const invs = [...current.invoices, {
-            ...emptyInvoice(), num: r.tx.transactionId, amt: r.tx.grossAmount, uwFee: r.tx.fee, net: r.tx.net,
-            paid: formatUpworkDate(r.tx.date), isPaid: true,
-          }]
+          const invs = [...current.invoices]
+          invs[0] = accumulateInvoice(invs[0] ?? emptyInvoice(), {
+            amt: r.tx.grossAmount, fee: r.tx.fee, net: r.tx.net, paid: formatUpworkDate(r.tx.date), txId: r.tx.transactionId,
+          })
           const updated: Project = { ...current, amount: current.amount + r.tx.grossAmount, invoices: invs }
           workingProjects.set(existingId, updated)
           existingTouchedIds.add(existingId)
@@ -164,12 +163,10 @@ export function ImportUpworkView({ projects, setProjects }: {
         if (!current) continue
         const invs = [...current.invoices]
         while (invs.length <= r.slot) invs.push(emptyInvoice())
-        invs[r.slot] = {
-          ...invs[r.slot], num: r.tx.transactionId, amt: r.tx.grossAmount, uwFee: r.tx.fee, net: r.tx.net,
-          paid: formatUpworkDate(r.tx.date), isPaid: true,
-        }
-        const shouldAccumulate = (originalAmounts.get(r.projectId) ?? 0) === 0
-        const updated: Project = { ...current, invoices: invs, amount: shouldAccumulate ? current.amount + r.tx.grossAmount : current.amount }
+        invs[r.slot] = accumulateInvoice(invs[r.slot], {
+          amt: r.tx.grossAmount, fee: r.tx.fee, net: r.tx.net, paid: formatUpworkDate(r.tx.date), txId: r.tx.transactionId,
+        })
+        const updated: Project = { ...current, invoices: invs, amount: current.amount + r.tx.grossAmount }
         workingProjects.set(r.projectId, updated)
         existingTouchedIds.add(r.projectId)
         touchedNames.set(r.projectId, updated.startup)

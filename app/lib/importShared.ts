@@ -17,6 +17,32 @@ export function nextInvoiceSlot(invoices: Invoice[], grossAmount: number): numbe
   return invoices.length
 }
 
+// An invoice's `num` field is normally a single transaction/invoice number, but an accumulating
+// invoice (see `accumulateInvoice`) stores every transaction ID it has folded in as a comma list.
+// This splits either shape back into its component IDs.
+export function invoiceNumIds(numField: string | undefined): string[] {
+  return (numField || '').split(',').map(s => s.trim()).filter(Boolean)
+}
+
+// Folds one transaction into a running-total invoice slot instead of allocating a new slot per
+// payment — used for recurring/hourly Upwork clients where "individual invoices don't matter, just
+// the total billed and the fee paid to Upwork" (weekly timesheets shouldn't each need their own
+// invoice slot, and the Detail view only has room for 3 anyway). No-ops if this exact transaction
+// was already folded in, so it's safe to call redundantly.
+export function accumulateInvoice(existing: Invoice, tx: { amt: number; fee: number; net: number; paid: string; txId: string }): Invoice {
+  const existingIds = invoiceNumIds(existing.num)
+  if (existingIds.includes(tx.txId)) return existing
+  return {
+    ...existing,
+    amt: (existing.amt || 0) + tx.amt,
+    uwFee: (existing.uwFee || 0) + tx.fee,
+    net: (existing.net || 0) + tx.net,
+    num: [...existingIds, tx.txId].join(','),
+    paid: tx.paid,
+    isPaid: true,
+  }
+}
+
 // Normalizes a raw CSV/API date into the app's existing MM/DD/YYYY invoice-date format.
 export function formatDateMDY(raw: string): string {
   const s = raw.trim()
