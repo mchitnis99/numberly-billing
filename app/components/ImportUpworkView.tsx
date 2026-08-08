@@ -1,7 +1,7 @@
 'use client'
 
 import { Dispatch, SetStateAction, useRef, useState } from 'react'
-import { Project, fmt, insertProject, upsertProject } from '../lib/data'
+import { Project, fmt, fetchProjects, insertProject, upsertProject } from '../lib/data'
 import { accumulateInvoice, emptyInvoice } from '../lib/importShared'
 import {
   parseUpworkCSV, buildReviewRows, formatUpworkDate, buildShellProject,
@@ -52,7 +52,7 @@ export function ImportUpworkView({ projects, setProjects }: {
     setSummary(null)
     setParseError('')
     const reader = new FileReader()
-    reader.onload = (ev) => {
+    reader.onload = async (ev) => {
       const text = ev.target?.result as string
       const transactions = parseUpworkCSV(text)
       if (transactions.length === 0) {
@@ -60,7 +60,19 @@ export function ImportUpworkView({ projects, setProjects }: {
         setRows([])
         return
       }
-      const built = buildReviewRows(transactions, projects)
+      // Re-fetch rather than trust the `projects` prop: if this is a second import run back-to-back
+      // (e.g. two overlapping CSV exports), React may not have re-rendered with the previous
+      // import's saved changes yet, and matching/dedup against stale data can silently double-count
+      // already-recorded transactions.
+      let latest: Project[]
+      try {
+        latest = await fetchProjects()
+        setProjects(latest)
+      } catch (err) {
+        console.error('Failed to refresh projects before building Upwork review rows', err)
+        latest = projects
+      }
+      const built = buildReviewRows(transactions, latest)
       setRows(built.map(r => ({
         ...r,
         included: r.status === 'Matched' || r.status === 'New project',
@@ -125,7 +137,16 @@ export function ImportUpworkView({ projects, setProjects }: {
     if (toApply.length === 0) return
     setApplying(true)
 
-    const workingProjects = new Map<number, Project>(projects.map(p => [p.id, p]))
+    // Fetch fresh rather than trust the `projects` prop, for the same staleness reason as in
+    // handleFile — this is the call that actually writes accumulated totals, so it's the most
+    // important place to be working from real current data, not a possibly-stale snapshot.
+    let latestProjects = projects
+    try {
+      latestProjects = await fetchProjects()
+    } catch (err) {
+      console.error('Failed to refresh projects before applying Upwork import', err)
+    }
+    const workingProjects = new Map<number, Project>(latestProjects.map(p => [p.id, p]))
     const newlyCreatedByGroup = new Map<string, number>()
     const createdProjects: Project[] = []
     const existingTouchedIds = new Set<number>()
@@ -180,12 +201,10 @@ export function ImportUpworkView({ projects, setProjects }: {
       console.error('Failed to save one or more projects updated from Upwork import', err)
     }
 
-    setProjects(prev => {
-      const byId = new Map(prev.map(p => [p.id, p]))
-      existingTouchedIds.forEach(id => { if (workingProjects.has(id)) byId.set(id, workingProjects.get(id)!) })
-      createdProjects.forEach(p => byId.set(p.id, p))
-      return [...byId.values()].sort((a, b) => a.id - b.id)
-    })
+    const byId = new Map(latestProjects.map(p => [p.id, p]))
+    existingTouchedIds.forEach(id => { if (workingProjects.has(id)) byId.set(id, workingProjects.get(id)!) })
+    createdProjects.forEach(p => byId.set(p.id, p))
+    setProjects([...byId.values()].sort((a, b) => a.id - b.id))
 
     setRows(prev => prev.map(r => appliedKeys.has(r.key) ? { ...r, applied: true, included: false } : r))
     setSummary({ count: appliedKeys.size, projectNames: [...new Set(touchedNames.values())] })
